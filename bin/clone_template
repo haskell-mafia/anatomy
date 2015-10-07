@@ -1,0 +1,15 @@
+#!/bin/sh -exu
+
+TEMPDIR=$1
+TEMPLATE=$2
+NEW_REPO=$3
+
+GITHUB_USER=
+GITHUB_OAUTH=
+GITHUB_ORG=
+
+cd $TEMPDIR
+git clone https://$GITHUB_USER:$GITHUB_OAUTH@github.com/$GITHUB_ORG/$TEMPLATE.git
+cd $TEMPLATE
+git remote add newrepo https://$GITHUB_USER:$GITHUB_OAUTH@github.com/$GITHUB_ORG/$NEW_REPO.git
+git push newrepo master

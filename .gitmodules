@@ -1,0 +1,15 @@
+[submodule "lib/ci"]
+	path = lib/ci
+	url = git@github.com:ambiata/ci.git
+[submodule "lib/disorder.hs"]
+	path = lib/disorder.hs
+	url = git@github.com:ambiata/disorder.hs.git
+[submodule "lib/github"]
+	path = lib/github
+	url = git@github.com:ambiata/github.git
+[submodule "lib/p"]
+	path = lib/p
+	url = git@github.com:ambiata/p.git
+[submodule "lib/x"]
+	path = lib/x
+	url = git@github.com:ambiata/x.git

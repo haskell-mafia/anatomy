@@ -1,0 +1,67 @@
+name:                  ambiata-anatomy
+version:               0.0.1
+license:               Apache-2.0
+license-file:          LICENSE
+author:                Ambiata <info@ambiata.com>
+maintainer:            Ambiata <info@ambiata.com>
+copyright:             (c) 2015 Ambiata.
+synopsis:              anatomy
+category:              System
+cabal-version:         >= 1.8
+build-type:            Custom
+description:           anatomy.
+
+library
+  build-depends:
+                       base                            >= 3          && < 5
+                     , bifunctors                      == 4.2.*
+                     , ci
+                     , either                          == 4.3.*
+                     , github
+                     , optparse-applicative            == 0.11.*
+                     , ambiata-p
+                     , process                         == 1.2.*
+                     , text                            == 1.2.*
+                     , template-haskell
+                     , transformers                    == 0.3.*
+                     , temporary                       == 1.2.*
+                     , file-embed                      == 0.0.*
+                     , bytestring                      == 0.10.*
+                     , unix                            == 2.7.*
+                     , ambiata-x-optparse
+
+  ghc-options:
+                       -Wall
+
+  hs-source-dirs:
+                       src
+                       gen
+
+
+  exposed-modules:
+                       BuildInfo_ambiata_anatomy
+                       Paths_ambiata_anatomy
+                       Anatomy
+                       Anatomy.Data
+                       Anatomy.Main
+                       Anatomy.System.Report
+                       Anatomy.System.Sync
+
+test-suite test
+  type:                exitcode-stdio-1.0
+
+  main-is:             test.hs
+
+  ghc-options:         -Wall -threaded -O2
+
+  hs-source-dirs:
+                       test
+
+  build-depends:
+                       base                            >= 3          && < 5
+                     , ambiata-anatomy
+                     , ambiata-disorder-core
+                     , ambiata-p
+                     , text
+                     , QuickCheck                      == 2.7.*
+                     , quickcheck-instances            == 0.3.*
