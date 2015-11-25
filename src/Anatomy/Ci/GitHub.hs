@@ -18,6 +18,7 @@ import           Control.Concurrent.Async
 import qualified Data.Map as M
 import           Data.String (String)
 import           Data.Time
+import qualified Data.Text as T
 
 import           Github.Data.Definitions
 import           Github.GitData.Trees as GHTree
@@ -99,7 +100,7 @@ hook url oauth name project = void $ do
 jenkins :: HooksUrl -> GithubAuth -> String -> String -> IO (Either Error Hook)
 jenkins url oauth name project =
   createHook oauth name project "jenkins" (M.fromList [
-       ("jenkins_hook_url", (hooksUrl url </> "github-webhook/"))
+       ("jenkins_hook_url", (T.unpack (hooksUrl url) </> "github-webhook/"))
      ]) (Just [
        "push"
      ]) (Just True)

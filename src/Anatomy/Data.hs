@@ -12,12 +12,16 @@ module Anatomy.Data (
   , SyncAction (..)
   , ReportError (..)
   , SyncError (..)
+  , Build (..)
+  , Replace (..)
+  , BuildTemplate (..)
   , renderReportError
   , renderSyncError
   , project
   ) where
 
-import           Data.Text as T
+import           Data.Text (Text)
+import qualified Data.Text as T
 
 import           Github.Data
 
@@ -28,7 +32,10 @@ newtype Org =
       orgName :: Text
     } deriving (Eq, Show)
 
-newtype GithubTemplate = GithubTemplate { githubTemplate ::  T.Text } deriving (Show, Eq)
+newtype GithubTemplate =
+  GithubTemplate {
+      githubTemplate ::  Text
+    } deriving (Show, Eq)
 
 data Team =
   Team {
@@ -44,11 +51,29 @@ data Project a b =
     , cls :: a
     , category :: Maybe b
     , teams :: [Team]
+    , builds :: [Build]
     } deriving (Eq, Show)
 
-project :: Text -> Text -> Status -> a -> Project a b
-project n d s c =
-  Project n d s c Nothing []
+data Build =
+  Build {
+      replacements :: [Replace]
+    , template :: BuildTemplate
+    } deriving (Eq, Show)
+
+data Replace =
+  Replace {
+      replaceKey :: Text
+    , replaceValue :: Text
+    } deriving (Eq, Show)
+
+newtype BuildTemplate =
+  BuildTemplate {
+      buildTemplate :: Text
+    } deriving (Eq, Show)
+
+project :: Text -> Text -> Status -> a -> [Build] -> Project a b
+project n d s c b =
+  Project n d s c Nothing [] b
 
 data Status =
     Idea             -- A readme.

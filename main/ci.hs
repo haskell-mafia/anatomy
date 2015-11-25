@@ -38,16 +38,16 @@ main = sanity >> getArgs >>= \args -> case args of
       hooks (HooksUrl h) a org
   "create-job" : username : job : project : templatefile : [] ->
     auth' >>= \a ->
-      J.createJob $ J.ModJob (J.Job username a job jenkinsA hooksA) templatefile (toLookup project Nothing)
+      J.createJob $ J.ModJob (J.Job username a job jenkinsA hooksA) (J.FileTemplate templatefile) (toLookup project Nothing)
   "create-job" : username : job : project : templatefile : j : h : [] ->
     auth' >>= \a ->
-      J.createJob $ J.ModJob (J.Job username a job (JenkinsUrl j) (HooksUrl h)) templatefile (toLookup project Nothing)
+      J.createJob $ J.ModJob (J.Job username a job (JenkinsUrl j) (HooksUrl h)) (J.FileTemplate templatefile) (toLookup project Nothing)
   "update-job" : username : job : project : templatefile : [] ->
     auth' >>= \a ->
-      J.updateJob $ J.ModJob (J.Job username a job jenkinsA hooksA) templatefile (toLookup project Nothing)
+      J.updateJob $ J.ModJob (J.Job username a job jenkinsA hooksA) (J.FileTemplate templatefile) (toLookup project Nothing)
   "update-job" : username : job : project : templatefile : j : h :[] ->
     auth' >>= \a ->
-      J.updateJob $ J.ModJob (J.Job username a job (JenkinsUrl j) (HooksUrl h)) templatefile (toLookup project Nothing)
+      J.updateJob $ J.ModJob (J.Job username a job (JenkinsUrl j) (HooksUrl h)) (J.FileTemplate templatefile) (toLookup project Nothing)
   "sync-jobs" : username : templatefile : [] ->
     sync' username templatefile jenkinsA hooksA
   "sync-jobs" : username : templatefile : j : h : [] ->
@@ -82,7 +82,7 @@ sync' username templatefile j h = do
     forM_ ciFiles $ \file -> do
       let jobName = project ++ (fromMaybe "" . stripPrefix prefix $ file)
       putStrLn ("Syncing " ++ jobName)
-      J.createOrUpdateJob $ J.ModJob (J.Job username oauth jobName j h) templatefile (toLookup project (Just file))
+      J.createOrUpdateJob $ J.ModJob (J.Job username oauth jobName j h) (J.FileTemplate templatefile) (toLookup project (Just file))
 
 jenkinsA :: JenkinsUrl
 jenkinsA =

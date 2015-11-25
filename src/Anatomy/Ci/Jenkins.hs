@@ -13,17 +13,17 @@ module Anatomy.Ci.Jenkins (
   , createOrUpdateJob
   ) where
 
+import           Anatomy.Data
+
 import qualified Data.ByteString as B hiding (unpack, pack)
-import qualified Data.ByteString.Char8 as B (unpack, pack)
+import qualified Data.ByteString.Char8 as B (unpack)
 import qualified Data.ByteString.Lazy as BL hiding (unpack, pack)
-import qualified Data.ByteString.Lazy.Char8 as BL (unpack)
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
-import           Data.Text.Template
-import           Data.String
+import           Data.Text.Template (substituteA)
 
 import           Network.Connection
 import           Network.HTTP.Client
@@ -39,43 +39,48 @@ import           System.Posix.Env
 
 newtype JenkinsUrl =
   JenkinsUrl {
-      jenkinsUrl :: String
+      jenkinsUrl :: Text
     } deriving (Eq, Show)
 
 newtype HooksUrl =
   HooksUrl {
-      hooksUrl :: String
+      hooksUrl :: Text
     } deriving (Eq, Show)
 
 data Job = Job {
-    org    :: String
-  , oauth   :: String
-  , jobName :: String
+    org :: Text
+  , oauth :: Text
+  , jobName :: Text
   , jenkinsHost :: JenkinsUrl
   , jenkinsHooks :: HooksUrl
   }
 
 data ModJob = ModJob {
-    jobreq       :: Job
-  , templatefile :: String
-  , params       :: String -> Maybe String
+    jobreq :: Job
+  , jobTemplate :: BuildTemplate
+  , params :: Text -> Maybe Text
   }
 
-getJob_ :: Job -> IO (Either (Int, String) String)
+getJob_ :: Job -> IO (Either (Int, Text) Text)
 getJob_ job = do
-  res <- https ((jenkinsUrl . jenkinsHost $ job) </> "job" </> jobName job </> "config.xml") (org job) (oauth job) rGet
+  res <- https (T.pack $ (T.unpack . jenkinsUrl . jenkinsHost $ job) </> "job" </> T.unpack (jobName job) </> "config.xml") (org job) (oauth job) rGet
   let body = responseBody res
+      b = T.decodeUtf8 . BL.toStrict $ body
   return $ case (statusCode . responseStatus) res of
-    200 -> Right . BL.unpack $ body
-    n   -> Left (n, show body)
+    200 ->
+      Right b
+    n   ->
+      Left (n, b)
 
 getJob :: Job -> IO ()
 getJob job =
-   getJob_ job >>= \x -> case x of
-       Right resp     -> putStrLn resp
+   getJob_ job >>= \x ->
+     case x of
+       Right resp ->
+         putStrLn . T.unpack $ resp
        Left (n, resp) -> do
          putStrLn $ "Couldn't fetch job [" <> show n <> "]"
-         putStrLn resp
+         putStrLn . T.unpack $ resp
          exitFailure
 
 createJob :: ModJob -> IO ()
@@ -86,25 +91,29 @@ createJob =
 
 updateJob :: ModJob -> IO ()
 updateJob =
-  modifyJob (\job -> "/job" </> job </> "config.xml") $ \x -> case x of
+  modifyJob (\job -> T.pack $ "/job" </> T.unpack job </> "config.xml") $ \x -> case x of
     Right job -> "Updated job [" <> job <> "]"
     Left n -> "Couldn't update job [" <> n <> "]"
 
-modifyJob :: (String -> String) -> (Either String String -> String) -> ModJob -> IO ()
+modifyJob :: (Text -> Text) -> (Either Text Text -> Text) -> ModJob -> IO ()
 modifyJob url respHandler modjob = do
   let job = jobreq modjob
-  body <- mkBody (params modjob) (templatefile modjob)
-  let baseUrl = jenkinsUrl . jenkinsHost $ job
+      baseUrl = jenkinsUrl . jenkinsHost $ job
+
+  body <- mkBody (params modjob) (jobTemplate modjob)
+
   https ((<>) baseUrl . url . jobName $ job) (org job) (oauth job) (rPost body . rXml) >>= \res ->
     case (statusCode . responseStatus) res of
-      200 -> putStrLn . respHandler . Right . jobName $ job
-      n   -> do putStrLn $ respHandler . Left . show $ n
-                putStrLn . show . responseBody $ res
-                exitFailure
+      200 ->
+        T.putStrLn . respHandler . Right . jobName $ job
+      n -> do
+        T.putStrLn . respHandler . Left . T.pack . show $ n
+        putStrLn . show . responseBody $ res
+        exitFailure
 
 generateJob :: ModJob -> IO ()
 generateJob modjob = do
-  res <- mkBody (params modjob) (templatefile modjob)
+  res <- mkBody (params modjob) (jobTemplate modjob)
   putStrLn . B.unpack $ res
 
 createOrUpdateJob :: ModJob -> IO ()
@@ -113,10 +122,13 @@ createOrUpdateJob modjob = do
     Left _  -> createJob modjob
     Right _ -> updateJob modjob
 
-https :: String ->  String -> String -> (Request -> Request) -> IO (Response BL.ByteString)
+https :: Text ->  Text -> Text -> (Request -> Request) -> IO (Response BL.ByteString)
 https url user password xform =
-  parseUrl url >>= \req -> withManager (mkManagerSettings (TLSSettingsSimple True False True) Nothing) . httpLbs $
-    (applyBasicAuth (B.pack user) (B.pack password) $ xform (req { checkStatus = const . const . const $ Nothing }))
+  parseUrl (T.unpack url) >>= \req ->
+    withManager (mkManagerSettings (TLSSettingsSimple True False True) Nothing) . httpLbs $
+      (applyBasicAuth (T.encodeUtf8 user) (T.encodeUtf8 password) $ xform (req {
+          checkStatus = const . const . const $ Nothing
+        }))
 
 rGet :: Request -> Request
 rGet req =
@@ -130,18 +142,18 @@ rXml :: Request -> Request
 rXml req =
   req { requestHeaders = ("Content-Type", "text/xml") : requestHeaders req }
 
-mkBody :: (String -> Maybe String) -> String -> IO B.ByteString
-mkBody props file = do
-  t <- T.readFile file
-  T.encodeUtf8 . TL.toStrict  <$> substituteA t (mkContext props)
+mkBody :: (Text -> Maybe Text) -> BuildTemplate -> IO B.ByteString
+mkBody props b =
+  T.encodeUtf8 . TL.toStrict <$> substituteA (buildTemplate b) (mkContext props)
 
-
-mkContext :: (String -> Maybe String) -> Text -> IO Text
+mkContext :: (Text -> Maybe Text) -> Text -> IO Text
 mkContext props x =
-    case (props . T.unpack $ x) of
-      Just y -> pure . T.pack $ y
-      Nothing -> case T.splitAt 4 x of
-           ("env_", e) ->
-             getEnv (T.unpack e) >>= maybe (fail $ "Invalid environment variable: " <> show x) (pure . T.pack)
-           _           ->
-             fail "Environment variables must be prefixed with `env_` in the template"
+  case props x of
+    Just y ->
+      pure y
+    Nothing ->
+      case T.splitAt 4 x of
+        ("env_", e) ->
+          getEnv (T.unpack e) >>= maybe (fail $ "Invalid environment variable: " <> show x) (pure . T.pack)
+        _ ->
+          fail "Environment variables must be prefixed with `env_` in the template"

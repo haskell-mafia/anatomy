@@ -114,44 +114,28 @@ setupHooks o h p = do
 createJenkinsJob :: Text -> JenkinsUrl -> HooksUrl -> Project a b -> IO ()
 createJenkinsJob defaultJenkinsUser j h p = do
   auth <- G.auth'
-  jenkinsUser <- fromMaybe (T.unpack defaultJenkinsUser) <$> getEnv "JENKINS_USER"
-  J.createJob J.ModJob {
-      J.jobreq = J.Job {
-            J.org = jenkinsUser
-          , J.oauth = auth
-          , J.jobName = T.unpack $ name p
-          , J.jenkinsHost = j
-          , J.jenkinsHooks = h
-        },
-      J.templatefile = jobTemplate,
-      J.params = toLookup p "./bin/ci"
-  }
-  J.createJob J.ModJob {
-      J.jobreq = J.Job {
-            J.org = jenkinsUser
-          , J.oauth = auth
-          , J.jobName = (T.unpack $ name p) <> ".branches"
-          , J.jenkinsHost = j
-          , J.jenkinsHooks = h
-        },
-      J.templatefile = jobTemplateBranch,
-      J.params = toLookup p "./bin/ci.branches"
-  }
+  jenkinsUser <- (maybe defaultJenkinsUser T.pack) <$> getEnv "JENKINS_USER"
+  forM_ (builds p) $ \b ->
+    J.createJob J.ModJob {
+          J.jobreq = J.Job {
+                J.org = jenkinsUser
+              , J.oauth = T.pack $ auth
+              , J.jobName = name p
+              , J.jenkinsHost = j
+              , J.jenkinsHooks = h
+            }
+        , J.jobTemplate = template b
+        , J.params = toParams p $ replacements b
+        }
 
+toParams :: Project a b -> [Replace] -> Text -> Maybe Text
+toParams p rs s = case s of
+  "project" ->
+    Just $ name p
+  _ ->
+    fmap replaceValue . flip P.find rs $ \r ->
+      replaceKey r == s
 
-toLookup :: Project a b -> CICommand -> [Char] -> Maybe [Char]
-toLookup p cmd s = case s of
-  "project"         -> Just $ T.unpack $ name p
-  "env_CI_COMMAND"  -> Just $ T.unpack cmd
-  _                 -> Nothing
-
-type CICommand = Text
-
-jobTemplate :: [Char]
-jobTemplate = "templates/job.xml"
-
-jobTemplateBranch :: [Char]
-jobTemplateBranch = "templates/branches.xml"
 
 applyTemplate :: Either Error Repo -> Project a b -> Maybe GithubTemplate -> IO ()
 applyTemplate (Right _) p (Just tmpName) =
@@ -159,6 +143,6 @@ applyTemplate (Right _) p (Just tmpName) =
 applyTemplate _ _ _ = return ()
 
 pushTemplate :: Project a b -> GithubTemplate -> IO ()
-pushTemplate p template =
-  void .withSystemTempDirectory "template_repo" $ \dir ->
-    system $ P.intercalate " " ["./bin/clone_template", dir, T.unpack . githubTemplate $ template, T.unpack $ name p]
+pushTemplate p t =
+  void . withSystemTempDirectory "template_repo" $ \dir ->
+    system $ P.intercalate " " ["./bin/clone_template", dir, T.unpack . githubTemplate $ t, T.unpack $ name p]
