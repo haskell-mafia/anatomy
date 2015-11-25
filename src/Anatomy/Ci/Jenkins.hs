@@ -3,16 +3,19 @@
 module Anatomy.Ci.Jenkins (
     Job (..)
   , ModJob (..)
+  , JenkinsUrl (..)
+  , HooksUrl (..)
   , getJob
   , createJob
   , updateJob
+  , generateJob
   , createOrUpdateJob
   ) where
 
 import           Control.Applicative
 
 import qualified Data.ByteString as B hiding (unpack, pack)
-import qualified Data.ByteString.Char8 as B (pack)
+import qualified Data.ByteString.Char8 as B (unpack, pack)
 import qualified Data.ByteString.Lazy as BL hiding (unpack, pack)
 import qualified Data.ByteString.Lazy.Char8 as BL (unpack)
 import           Data.Monoid
@@ -30,10 +33,22 @@ import           Network.HTTP.Types
 import           System.Exit
 import           System.Posix.Env
 
+newtype JenkinsUrl =
+  JenkinsUrl {
+      jenkinsUrl :: String
+    } deriving (Eq, Show)
+
+newtype HooksUrl =
+  HooksUrl {
+      hooksUrl :: String
+    } deriving (Eq, Show)
+
 data Job = Job {
     org    :: String
   , oauth   :: String
   , jobName :: String
+  , jenkinsHost :: JenkinsUrl
+  , jenkinsHooks :: HooksUrl
   }
 
 data ModJob = ModJob {
@@ -44,7 +59,7 @@ data ModJob = ModJob {
 
 getJob_ :: Job -> IO (Either (Int, String) String)
 getJob_ job = do
-  res <- https ("https://ci.ambiata.com/job/" ++ (jobName job) ++ "/config.xml") (org job) (oauth job) rGet
+  res <- https ((jenkinsUrl . jenkinsHost) job ++ "/job/" ++ (jobName job) ++ "/config.xml") (org job) (oauth job) rGet
   let body = responseBody res
   return $ case (statusCode . responseStatus) res of
     200 -> Right . BL.unpack $ body
@@ -61,13 +76,13 @@ getJob job =
 
 createJob :: ModJob -> IO ()
 createJob =
-  modifyJob ("https://ci.ambiata.com/createItem?name=" <>) $ \x -> case x of
+  modifyJob ("/createItem?name=" <>) $ \x -> case x of
     Right job -> "Created job [" ++ job ++ "]"
     Left n -> "Couldn't create job [" ++ n ++ "]"
 
 updateJob :: ModJob -> IO ()
 updateJob =
-  modifyJob (\job -> "https://ci.ambiata.com/job/" ++ job ++ "/config.xml") $ \x -> case x of
+  modifyJob (\job -> "/job/" ++ job ++ "/config.xml") $ \x -> case x of
     Right job -> "Updated job [" ++ job ++ "]"
     Left n -> "Couldn't update job [" ++ n ++ "]"
 
@@ -75,12 +90,18 @@ modifyJob :: (String -> String) -> (Either String String -> String) -> ModJob ->
 modifyJob url respHandler modjob = do
   let job = jobreq modjob
   body <- mkBody (params modjob) (templatefile modjob)
-  https (url . jobName $ job) (org job) (oauth job) (rPost body . rXml) >>= \res ->
+  let baseUrl = jenkinsUrl . jenkinsHost $ job
+  https ((<>) baseUrl . url . jobName $ job) (org job) (oauth job) (rPost body . rXml) >>= \res ->
     case (statusCode . responseStatus) res of
       200 -> putStrLn . respHandler . Right . jobName $ job
       n   -> do putStrLn $ respHandler . Left . show $ n
                 putStrLn . show . responseBody $ res
                 exitFailure
+
+generateJob :: ModJob -> IO ()
+generateJob modjob = do
+  res <- mkBody (params modjob) (templatefile modjob)
+  putStrLn . B.unpack $ res
 
 createOrUpdateJob :: ModJob -> IO ()
 createOrUpdateJob modjob = do
