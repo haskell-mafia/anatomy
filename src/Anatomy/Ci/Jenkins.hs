@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
 module Anatomy.Ci.Jenkins (
@@ -12,25 +13,28 @@ module Anatomy.Ci.Jenkins (
   , createOrUpdateJob
   ) where
 
-import           Control.Applicative
-
 import qualified Data.ByteString as B hiding (unpack, pack)
 import qualified Data.ByteString.Char8 as B (unpack, pack)
 import qualified Data.ByteString.Lazy as BL hiding (unpack, pack)
 import qualified Data.ByteString.Lazy.Char8 as BL (unpack)
-import           Data.Monoid
+import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
 import           Data.Text.Template
+import           Data.String
 
 import           Network.Connection
 import           Network.HTTP.Client
 import           Network.HTTP.Client.TLS
 import           Network.HTTP.Types
 
+import           P
+
 import           System.Exit
+import           System.FilePath ((</>))
+import           System.IO
 import           System.Posix.Env
 
 newtype JenkinsUrl =
@@ -59,7 +63,7 @@ data ModJob = ModJob {
 
 getJob_ :: Job -> IO (Either (Int, String) String)
 getJob_ job = do
-  res <- https ((jenkinsUrl . jenkinsHost) job ++ "/job/" ++ (jobName job) ++ "/config.xml") (org job) (oauth job) rGet
+  res <- https ((jenkinsUrl . jenkinsHost $ job) </> "job" </> jobName job </> "config.xml") (org job) (oauth job) rGet
   let body = responseBody res
   return $ case (statusCode . responseStatus) res of
     200 -> Right . BL.unpack $ body
@@ -70,21 +74,21 @@ getJob job =
    getJob_ job >>= \x -> case x of
        Right resp     -> putStrLn resp
        Left (n, resp) -> do
-         putStrLn $ "Couldn't fetch job [" ++ show n ++ "]"
+         putStrLn $ "Couldn't fetch job [" <> show n <> "]"
          putStrLn resp
          exitFailure
 
 createJob :: ModJob -> IO ()
 createJob =
   modifyJob ("/createItem?name=" <>) $ \x -> case x of
-    Right job -> "Created job [" ++ job ++ "]"
-    Left n -> "Couldn't create job [" ++ n ++ "]"
+    Right job -> "Created job [" <> job <> "]"
+    Left n -> "Couldn't create job [" <> n <> "]"
 
 updateJob :: ModJob -> IO ()
 updateJob =
-  modifyJob (\job -> "/job/" ++ job ++ "/config.xml") $ \x -> case x of
-    Right job -> "Updated job [" ++ job ++ "]"
-    Left n -> "Couldn't update job [" ++ n ++ "]"
+  modifyJob (\job -> "/job" </> job </> "config.xml") $ \x -> case x of
+    Right job -> "Updated job [" <> job <> "]"
+    Left n -> "Couldn't update job [" <> n <> "]"
 
 modifyJob :: (String -> String) -> (Either String String -> String) -> ModJob -> IO ()
 modifyJob url respHandler modjob = do
@@ -132,10 +136,12 @@ mkBody props file = do
   T.encodeUtf8 . TL.toStrict  <$> substituteA t (mkContext props)
 
 
-mkContext :: (String -> Maybe String) -> T.Text -> IO T.Text
+mkContext :: (String -> Maybe String) -> Text -> IO Text
 mkContext props x =
     case (props . T.unpack $ x) of
       Just y -> pure . T.pack $ y
       Nothing -> case T.splitAt 4 x of
-           ("env_", e) -> getEnv (T.unpack e) >>= maybe (error $ "Invalid environment variable: " ++ show x) (pure . T.pack)
-           _           -> error "Environment variables must be prefixed with `env_` in the template"
+           ("env_", e) ->
+             getEnv (T.unpack e) >>= maybe (fail $ "Invalid environment variable: " <> show x) (pure . T.pack)
+           _           ->
+             fail "Environment variables must be prefixed with `env_` in the template"
