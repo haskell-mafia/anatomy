@@ -10,7 +10,7 @@ import           Anatomy.Data
 import           Control.Monad.Trans.Either
 import           Control.Monad.IO.Class
 
-import qualified Ci.GitHub as G
+import qualified Anatomy.Ci.GitHub as G
 
 import           Data.List as L
 import           Data.Text as T
