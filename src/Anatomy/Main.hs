@@ -8,7 +8,8 @@ import           BuildInfo_ambiata_anatomy
 
 import           Control.Monad.IO.Class
 
-import           Data.Text as T
+import           Data.Text (Text)
+import qualified Data.Text as T
 
 import           Github.Data
 
@@ -29,15 +30,17 @@ data Command =
   | SyncCommand
   deriving (Eq, Show)
 
-anatomyMain
-  :: (a -> Maybe GithubTemplate) -- ^ a function that takes the class of a project and decides which template to apply, if any at all...
-  -> T.Text     -- ^ Default Jenkins user, overridden by the JENKINS_USER environment variable
+anatomyMain ::
+  (a -> Maybe GithubTemplate) -- ^ a function that takes the class of a project and decides which template to apply, if any at all...
+  -> Text       -- ^ Default Jenkins user, overridden by the JENKINS_USER environment variable
+  -> JenkinsUrl -- ^ Jenkins base url
+  -> HooksUrl   -- ^ Jenkins url to point github hooks to
   -> Org        -- ^ GitHub organisation
   -> Team       -- ^ A team of people to add as Collaborators on the new repo.
   -> Team       -- ^ A team of everyone in your organisation
   -> [Project a b]
   -> IO ()
-anatomyMain templateName defaultJenkinsUser o owners everyone projects = do
+anatomyMain templateName defaultJenkinsUser j h o owners everyone projects = do
   hSetBuffering stdout LineBuffering
   hSetBuffering stderr LineBuffering
   dispatch anatomy >>= \sc ->
@@ -57,9 +60,9 @@ anatomyMain templateName defaultJenkinsUser o owners everyone projects = do
               (Nothing, Just g) ->
                 putStrLn $ "[KO] no anatomy metadata found for " <> repoName g)
       DiagnoseCommand ->
-        (orDie renderSyncError $ sync defaultJenkinsUser templateName o owners everyone projects Diagnose) >>= syncReport
+        (orDie renderSyncError $ sync defaultJenkinsUser j h templateName o owners everyone projects Diagnose) >>= syncReport
       SyncCommand ->
-        (orDie renderSyncError $ sync defaultJenkinsUser templateName o owners everyone projects Sync) >>= syncReport
+        (orDie renderSyncError $ sync defaultJenkinsUser j h templateName o owners everyone projects Sync) >>= syncReport
 
 anatomy :: Parser Command
 anatomy =

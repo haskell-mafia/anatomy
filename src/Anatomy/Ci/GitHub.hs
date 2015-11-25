@@ -11,6 +11,8 @@ module Anatomy.Ci.GitHub (
   , stats
   ) where
 
+import           Anatomy.Ci.Jenkins (HooksUrl (..))
+
 import           Control.Concurrent.Async
 
 import           Data.List (map, (++))
@@ -79,25 +81,25 @@ stats oauth org = do
           ]
 
 -- | Register all hooks for all organization projects
-hooks :: GithubAuth -> String -> IO ()
-hooks oauth org = do
+hooks :: HooksUrl -> GithubAuth -> String -> IO ()
+hooks url oauth org = do
   repos' <- organizationRepos' (Just oauth) org >>= handler
   forM_ repos' $ \r ->
-    hook oauth (githubOwnerLogin . repoOwner $ r) (repoName r)
+    hook url oauth (githubOwnerLogin . repoOwner $ r) (repoName r)
 
 -- | Register all hooks for specified project
-hook :: GithubAuth -> String -> String -> IO ()
-hook oauth name project = void $ do
+hook :: HooksUrl -> GithubAuth -> String -> String -> IO ()
+hook url oauth name project = void $ do
   putStrLn $ "Creating hooks for [" ++ name ++ "/" ++ project ++ "]"
-  forM_ [jenkins, hipchat] $ \h ->
+  forM_ [jenkins url, hipchat] $ \h ->
     h oauth name project >>= handler
 
 -- | Register the jenkins hook
 -- |   schema: https://api.github.com/hooks
-jenkins :: GithubAuth -> String -> String -> IO (Either Error Hook)
-jenkins oauth name project =
+jenkins :: HooksUrl -> GithubAuth -> String -> String -> IO (Either Error Hook)
+jenkins url oauth name project =
   createHook oauth name project "jenkins" (M.fromList [
-       ("jenkins_hook_url", "https://ci.ambiata.com/github-webhook/")
+       ("jenkins_hook_url", (hooksUrl url ++ "/github-webhook/"))
      ]) (Just [
        "push"
      ]) (Just True)

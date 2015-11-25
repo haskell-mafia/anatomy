@@ -40,3 +40,9 @@ Sync will not touch any currently existing projects.
 Pretty pictures etc... to help us visualize projects.
 
 Statistics scraped from github. PRs merged per week, avg. durations etc...
+
+
+Cli
+---
+
+[anatomy-ci](doc/anatomy-ci.md)
