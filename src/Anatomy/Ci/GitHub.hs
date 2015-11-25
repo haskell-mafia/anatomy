@@ -15,7 +15,6 @@ import           Anatomy.Ci.Jenkins (HooksUrl (..))
 
 import           Control.Concurrent.Async
 
-import           Data.List (map, (++))
 import qualified Data.Map as M
 import           Data.String (String)
 import           Data.Time
@@ -29,15 +28,16 @@ import           Github.Repos.Hooks
 
 import           P
 
-import           System.IO
 import           System.Exit
+import           System.FilePath ((</>))
 import           System.FilePath.Glob
+import           System.IO
 import           System.Posix.Env
 
 
 env :: String -> IO String
 env var = getEnv var >>= \t -> case t of
-  Nothing -> putStrLn ("Need to specify $" ++ var) >> exitFailure
+  Nothing -> putStrLn ("Need to specify $" <> var) >> exitFailure
   Just a -> pure a
 
 auth' :: IO String
@@ -90,7 +90,7 @@ hooks url oauth org = do
 -- | Register all hooks for specified project
 hook :: HooksUrl -> GithubAuth -> String -> String -> IO ()
 hook url oauth name project = void $ do
-  putStrLn $ "Creating hooks for [" ++ name ++ "/" ++ project ++ "]"
+  putStrLn $ "Creating hooks for [" <> name </> project <> "]"
   forM_ [jenkins url, hipchat] $ \h ->
     h oauth name project >>= handler
 
@@ -99,7 +99,7 @@ hook url oauth name project = void $ do
 jenkins :: HooksUrl -> GithubAuth -> String -> String -> IO (Either Error Hook)
 jenkins url oauth name project =
   createHook oauth name project "jenkins" (M.fromList [
-       ("jenkins_hook_url", (hooksUrl url ++ "/github-webhook/"))
+       ("jenkins_hook_url", (hooksUrl url </> "github-webhook/"))
      ]) (Just [
        "push"
      ]) (Just True)
@@ -110,7 +110,7 @@ files :: GithubAuth -> String -> String -> String -> IO [String]
 files oauth name project fileGlob = do
   ghTree <- GHTree.nestedTree (Just oauth) name project "HEAD" >>= handler
   let pattern = compile fileGlob
-  return . filter (match pattern) . map gitTreePath . treeGitTrees $ ghTree
+  return . filter (match pattern) . fmap gitTreePath . treeGitTrees $ ghTree
 
 
 -- | Register the hipchat hook
