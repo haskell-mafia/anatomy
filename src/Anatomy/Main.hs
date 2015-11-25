@@ -37,7 +37,7 @@ anatomyMain
   -> Team       -- ^ A team of everyone in your organisation
   -> [Project a b]
   -> IO ()
-anatomyMain templateName defaultJenkinsUser org owners everyone projects = do
+anatomyMain templateName defaultJenkinsUser o owners everyone projects = do
   hSetBuffering stdout LineBuffering
   hSetBuffering stderr LineBuffering
   dispatch anatomy >>= \sc ->
@@ -46,7 +46,7 @@ anatomyMain templateName defaultJenkinsUser org owners everyone projects = do
         (putStrLn $ "anatomy: " <> buildInfoVersion) >> exitSuccess
       ReportCommand ->
         orDie renderReportError $
-          report org projects >>= mapM_ (\r ->
+          report o projects >>= mapM_ (\r ->
             liftIO $ case (reportProject r, reportGithub r) of
               (Nothing, Nothing) ->
                 pure ()
@@ -57,9 +57,9 @@ anatomyMain templateName defaultJenkinsUser org owners everyone projects = do
               (Nothing, Just g) ->
                 putStrLn $ "[KO] no anatomy metadata found for " <> repoName g)
       DiagnoseCommand ->
-        (orDie renderSyncError $ sync defaultJenkinsUser templateName org owners everyone projects Diagnose) >>= syncReport
+        (orDie renderSyncError $ sync defaultJenkinsUser templateName o owners everyone projects Diagnose) >>= syncReport
       SyncCommand ->
-        (orDie renderSyncError $ sync defaultJenkinsUser templateName org owners everyone projects Sync) >>= syncReport
+        (orDie renderSyncError $ sync defaultJenkinsUser templateName o owners everyone projects Sync) >>= syncReport
 
 anatomy :: Parser Command
 anatomy =

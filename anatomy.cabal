@@ -14,21 +14,29 @@ description:           anatomy.
 library
   build-depends:
                        base                            >= 3          && < 5
-                     , bifunctors                      == 4.2.*
-                     , ci
-                     , either                          == 4.3.*
-                     , github
-                     , optparse-applicative            == 0.11.*
                      , ambiata-p
+                     , ambiata-x-optparse
+                     , async                           == 2.0.*
+                     , bifunctors                      == 4.2.*
+                     , bytestring                      == 0.10.*
+                     , connection                      == 0.2.*
+                     , containers
+                     , either                          == 4.3.*
+                     , file-embed                      == 0.0.*
+                     , github
+                     , Glob
+                     , http-client                     == 0.3.*
+                     , http-client-tls                 == 0.2.*
+                     , http-types                      == 0.8.*
+                     , optparse-applicative            == 0.11.*
                      , process                         == 1.2.*
                      , text                            == 1.2.*
+                     , template                        == 0.2.*
                      , template-haskell
-                     , transformers                    == 0.3.*
                      , temporary                       == 1.2.*
-                     , file-embed                      == 0.0.*
-                     , bytestring                      == 0.10.*
+                     , time                            == 1.4.*
+                     , transformers                    == 0.3.*
                      , unix                            == 2.7.*
-                     , ambiata-x-optparse
 
   ghc-options:
                        -Wall
@@ -42,10 +50,20 @@ library
                        BuildInfo_ambiata_anatomy
                        Paths_ambiata_anatomy
                        Anatomy
+                       Anatomy.Ci.Jenkins
+                       Anatomy.Ci.GitHub
                        Anatomy.Data
                        Anatomy.Main
                        Anatomy.System.Report
                        Anatomy.System.Sync
+
+executable             anatomy-ci
+    ghc-options:       -Wall -threaded -O2
+    main-is:           main/ci.hs
+    build-depends:     base
+                     , ambiata-anatomy
+                     , ambiata-p
+
 
 test-suite test
   type:                exitcode-stdio-1.0

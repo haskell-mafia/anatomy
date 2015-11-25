@@ -12,8 +12,8 @@ import           Anatomy.System.Report
 import           Control.Monad.Trans.Either
 import           Control.Monad.IO.Class
 
-import qualified Ci.GitHub as G
-import qualified Ci.Jenkins as J
+import qualified Anatomy.Ci.GitHub as G
+import qualified Anatomy.Ci.Jenkins as J
 
 import           Data.Text as T
 
@@ -128,10 +128,10 @@ toLookup p cmd s = case s of
 type CICommand = Text
 
 jobTemplate :: [Char]
-jobTemplate = "lib/ci/templates/job.xml"
+jobTemplate = "templates/job.xml"
 
 jobTemplateBranch :: [Char]
-jobTemplateBranch = "lib/ci/templates/branches.xml"
+jobTemplateBranch = "templates/branches.xml"
 
 applyTemplate :: Either Error Repo -> Project a b -> Maybe GithubTemplate -> IO ()
 applyTemplate (Right _) p (Just tmpName) =
