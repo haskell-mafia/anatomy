@@ -18,6 +18,7 @@ import           Control.Concurrent.Async
 import qualified Data.Map as M
 import           Data.String (String)
 import           Data.Time
+import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Github.Data.Definitions
@@ -41,11 +42,11 @@ env var = getEnv var >>= \t -> case t of
   Nothing -> putStrLn ("Need to specify $" <> var) >> exitFailure
   Just a -> pure a
 
-auth' :: IO String
-auth' = env "GITHUB_OAUTH"
+auth' :: IO Text
+auth' = T.pack <$> env "GITHUB_OAUTH"
 
 auth :: IO GithubAuth
-auth = GithubOAuth <$> auth'
+auth = (GithubOAuth . T.unpack) <$> auth'
 
 hipchat' :: IO String
 hipchat' = env "HIPCHAT_TOKEN"

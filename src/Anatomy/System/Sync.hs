@@ -46,10 +46,13 @@ sync ::
   -> SyncMode
   -> EitherT SyncError IO [Project a b]
 sync defaultJenkinsUser j h templateName o t everyone ps m = do
-  ss <- bimapEitherT SyncReportError id $ syncables <$> report o ps
+  r <- bimapEitherT SyncReportError id $ report o ps
   when (m == Sync) $ do
-    forM_ ss $ create defaultJenkinsUser j h templateName o t everyone
-  pure ss
+    forM_ (syncables r) $
+      create h templateName o t everyone
+    forM_ (jenkinsable r) $
+      liftIO . createOrUpdateJenkinsJob defaultJenkinsUser j h
+  pure (syncables r)
 
 -- | Log sync reporting for the specified projects.
 syncReport :: [Project a b] -> IO ()
@@ -68,8 +71,17 @@ syncables rs =
     Report Nothing (Just _) -> []
     Report (Just p) Nothing -> [p]
 
-create :: Text -> JenkinsUrl -> HooksUrl -> (a -> Maybe GithubTemplate) -> Org -> Team -> Team -> Project a b -> EitherT SyncError IO ()
-create defaultJenkinsUser j h templateName o t everyone p = do
+jenkinsable :: [Report a b] -> [Project a b]
+jenkinsable rs =
+  rs >>= \r ->
+    case r of
+      Report (Just p) _ ->
+        [p]
+      Report _ _ ->
+        []
+
+create :: HooksUrl -> (a -> Maybe GithubTemplate) -> Org -> Team -> Team -> Project a b -> EitherT SyncError IO ()
+create h templateName o t everyone p = do
   auth <- liftIO G.auth
   void . bimapEitherT SyncCreateError id . EitherT $
       do
@@ -86,7 +98,11 @@ create defaultJenkinsUser j h templateName o t everyone p = do
           }
         applyTemplate r p $ templateName (cls p)
         addExtraTeam (Just auth) r
-        setupCi r defaultJenkinsUser o j h p
+        case r of
+          Right _ ->
+            setupHooks o h p
+          Left _ ->
+            pure ()
         return r
       where
         addExtraTeam auth (Right _) =
@@ -96,30 +112,20 @@ create defaultJenkinsUser j h templateName o t everyone p = do
         teamId =
           teamGithubId everyone
 
-
-setupCi :: Either Error Repo -> T.Text -> Org -> JenkinsUrl -> HooksUrl -> Project a b -> IO ()
-setupCi (Right _) defaultJenkinsUser o j h p = do
-  createJenkinsJob defaultJenkinsUser j h p
-  setupHooks o h p
-setupCi _ _ _ _ _ _ =
-  return ()
-
-
 setupHooks :: Org -> HooksUrl -> Project a b -> IO ()
 setupHooks o h p = do
     auth <- G.auth
     G.hook h auth (T.unpack $ orgName o) (T.unpack $ name p)
 
-
-createJenkinsJob :: Text -> JenkinsUrl -> HooksUrl -> Project a b -> IO ()
-createJenkinsJob defaultJenkinsUser j h p = do
+createOrUpdateJenkinsJob :: Text -> JenkinsUrl -> HooksUrl -> Project a b -> IO ()
+createOrUpdateJenkinsJob defaultJenkinsUser j h p = do
   auth <- G.auth'
   jenkinsUser <- (maybe defaultJenkinsUser T.pack) <$> getEnv "JENKINS_USER"
   forM_ (builds p) $ \b ->
-    J.createJob J.ModJob {
+    J.createOrUpdateJob J.ModJob {
           J.jobreq = J.Job {
                 J.org = jenkinsUser
-              , J.oauth = T.pack $ auth
+              , J.oauth = auth
               , J.jobName = name p
               , J.jenkinsHost = j
               , J.jenkinsHooks = h
@@ -135,7 +141,6 @@ toParams p rs s = case s of
   _ ->
     fmap replaceValue . flip P.find rs $ \r ->
       replaceKey r == s
-
 
 applyTemplate :: Either Error Repo -> Project a b -> Maybe GithubTemplate -> IO ()
 applyTemplate (Right _) p (Just tmpName) =
