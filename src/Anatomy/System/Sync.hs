@@ -126,7 +126,7 @@ createOrUpdateJenkinsJob defaultJenkinsUser j h p = do
           J.jobreq = J.Job {
                 J.org = jenkinsUser
               , J.oauth = auth
-              , J.jobName = name p
+              , J.jobName = buildName b
               , J.jenkinsHost = j
               , J.jenkinsHooks = h
             }
