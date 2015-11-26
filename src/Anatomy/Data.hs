@@ -13,6 +13,7 @@ module Anatomy.Data (
   , ReportError (..)
   , SyncError (..)
   , Build (..)
+  , BuildSkeleton (..)
   , Replace (..)
   , BuildTemplate (..)
   , renderReportError
@@ -56,9 +57,17 @@ data Project a b =
 
 data Build =
   Build {
-      replacements :: [Replace]
+      buildName :: Text
+    , replacements :: [Replace]
     , template :: BuildTemplate
     } deriving (Eq, Show)
+
+data BuildSkeleton =
+  BuildSkeleton {
+      skeletonNameWith :: Text -> Text
+    , skeletonReplacements :: [Replace]
+    , skeletonTemplate :: BuildTemplate
+    }
 
 data Replace =
   Replace {
@@ -71,9 +80,9 @@ newtype BuildTemplate =
       buildTemplate :: Text
     } deriving (Eq, Show)
 
-project :: Text -> Text -> Status -> a -> [Build] -> Project a b
+project :: Text -> Text -> Status -> a -> [BuildSkeleton] -> Project a b
 project n d s c b =
-  Project n d s c Nothing [] b
+  Project n d s c Nothing [] ((\(BuildSkeleton w r t) -> Build (w n) r t) <$> b)
 
 data Status =
     Idea             -- A readme.
