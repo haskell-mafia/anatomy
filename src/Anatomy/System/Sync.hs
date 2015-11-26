@@ -9,8 +9,10 @@ module Anatomy.System.Sync (
 import           Anatomy.Data
 import           Anatomy.System.Report
 
+import           Control.Concurrent (threadDelay)
 import           Control.Monad.Trans.Either
 import           Control.Monad.IO.Class
+import           Control.Retry
 
 import qualified Anatomy.Ci.GitHub as G
 import           Anatomy.Ci.Jenkins (JenkinsUrl (..), HooksUrl (..))
@@ -50,8 +52,12 @@ sync defaultJenkinsUser j h templateName o t everyone ps m = do
   when (m == Sync) $ do
     forM_ (syncables r) $
       create h templateName o t everyone
-    forM_ (jenkinsable r) $
-      liftIO . createOrUpdateJenkinsJob defaultJenkinsUser j h
+    forM_ (jenkinsable r) $ \z -> do
+      liftIO $ threadDelay 200000 {-- 200 ms --}
+      liftIO $
+        recoverAll
+          (limitRetries 5 <> exponentialBackoff 100000 {-- 100 ms --})
+          (createOrUpdateJenkinsJob defaultJenkinsUser j h z)
   pure (syncables r)
 
 -- | Log sync reporting for the specified projects.
