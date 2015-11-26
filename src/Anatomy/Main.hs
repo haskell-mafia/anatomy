@@ -28,6 +28,7 @@ data Command =
   | ReportCommand
   | DiagnoseCommand
   | SyncCommand
+  | SyncUpdateCommand
   deriving (Eq, Show)
 
 anatomyMain ::
@@ -43,6 +44,7 @@ anatomyMain ::
 anatomyMain templateName defaultJenkinsUser j h o owners everyone projects = do
   hSetBuffering stdout LineBuffering
   hSetBuffering stderr LineBuffering
+  let sync' s = (orDie renderSyncError $ sync defaultJenkinsUser j h templateName o owners everyone projects s) >>= syncReport
   dispatch anatomy >>= \sc ->
     case sc of
       VersionCommand ->
@@ -60,9 +62,11 @@ anatomyMain templateName defaultJenkinsUser j h o owners everyone projects = do
               (Nothing, Just g) ->
                 putStrLn $ "[KO] no anatomy metadata found for " <> repoName g)
       DiagnoseCommand ->
-        (orDie renderSyncError $ sync defaultJenkinsUser j h templateName o owners everyone projects Diagnose) >>= syncReport
+        sync' Diagnose
       SyncCommand ->
-        (orDie renderSyncError $ sync defaultJenkinsUser j h templateName o owners everyone projects Sync) >>= syncReport
+        sync' Sync
+      SyncUpdateCommand ->
+        sync' SyncUpdate
 
 anatomy :: Parser Command
 anatomy =
@@ -79,6 +83,9 @@ commandP =  subparser $
   <> command' "sync"
               "Create new projects, archive old ones (currently only creates new ones)."
               (pure SyncCommand)
+  <> command' "sync-update"
+              "Create new projects, update all jenkins configs."
+              (pure SyncUpdateCommand)
 
 versionP :: Parser Command
 versionP =

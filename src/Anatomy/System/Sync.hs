@@ -49,9 +49,10 @@ sync ::
   -> EitherT SyncError IO [Project a b]
 sync defaultJenkinsUser j h templateName o t everyone ps m = do
   r <- bimapEitherT SyncReportError id $ report o ps
-  when (m == Sync) $ do
+  when (m == Sync || m == SyncUpdate) .
     forM_ (syncables r) $
-      create h templateName o t everyone
+      create defaultJenkinsUser j h templateName o t everyone
+  when (m == SyncUpdate) .
     forM_ (jenkinsable r) $ \z -> do
       liftIO $ threadDelay 200000 {-- 200 ms --}
 
@@ -62,9 +63,11 @@ sync defaultJenkinsUser j h templateName o t everyone ps m = do
         currentJob <- getJob jenkinsUser auth b j h
 
         let mj = genModJob j h jenkinsUser auth z b
-        expectedJob <- Just <$> J.generateJob mj
+        expectedJob' <- J.generateJob mj
 
-        when (currentJob /= expectedJob) $
+        let expectedJob = T.strip $ T.replace "&quot;" "\"" expectedJob'
+
+        when (currentJob /= Just expectedJob) $
             recoverAll
               (limitRetries 5 <> exponentialBackoff 100000 {-- 100 ms --})
               (createOrUpdateJenkinsJob defaultJenkinsUser j h z)
@@ -110,8 +113,8 @@ jenkinsable rs =
       Report _ _ ->
         []
 
-create :: HooksUrl -> (a -> Maybe GithubTemplate) -> Org -> Team -> Team -> Project a b -> EitherT SyncError IO ()
-create h templateName o t everyone p = do
+create :: Text -> JenkinsUrl -> HooksUrl -> (a -> Maybe GithubTemplate) -> Org -> Team -> Team -> Project a b -> EitherT SyncError IO ()
+create defaultJenkinsUser j h templateName o t everyone p = do
   auth <- liftIO G.auth
   void . bimapEitherT SyncCreateError id . EitherT $
       do
@@ -130,7 +133,7 @@ create h templateName o t everyone p = do
         addExtraTeam (Just auth) r
         case r of
           Right _ ->
-            setupHooks o h p
+            setupCi o defaultJenkinsUser j h p
           Left _ ->
             pure ()
         return r
@@ -142,10 +145,11 @@ create h templateName o t everyone p = do
         teamId =
           teamGithubId everyone
 
-setupHooks :: Org -> HooksUrl -> Project a b -> IO ()
-setupHooks o h p = do
+setupCi :: Org -> Text -> JenkinsUrl -> HooksUrl -> Project a b -> IO ()
+setupCi o defaultJenkinsUser j h p = do
     auth <- G.auth
     G.hook h auth (T.unpack $ orgName o) (T.unpack $ name p)
+    createOrUpdateJenkinsJob defaultJenkinsUser j h p
 
 createOrUpdateJenkinsJob :: Text -> JenkinsUrl -> HooksUrl -> Project a b -> IO ()
 createOrUpdateJenkinsJob defaultJenkinsUser j h p = do
