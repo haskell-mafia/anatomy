@@ -126,6 +126,7 @@ data SyncError =
 data SyncMode =
     Diagnose
   | Sync
+  | SyncUpdate
   deriving (Eq, Show)
 
 renderReportError :: ReportError -> Text
