@@ -54,11 +54,35 @@ sync defaultJenkinsUser j h templateName o t everyone ps m = do
       create h templateName o t everyone
     forM_ (jenkinsable r) $ \z -> do
       liftIO $ threadDelay 200000 {-- 200 ms --}
-      liftIO $
-        recoverAll
-          (limitRetries 5 <> exponentialBackoff 100000 {-- 100 ms --})
-          (createOrUpdateJenkinsJob defaultJenkinsUser j h z)
+
+      forM (builds z) $ \b -> liftIO $ do
+        auth <- G.auth'
+        jenkinsUser <- (maybe defaultJenkinsUser T.pack) <$> getEnv "JENKINS_USER"
+
+        currentJob <- getJob jenkinsUser auth b j h
+
+        let mj = genModJob j h jenkinsUser auth z b
+        expectedJob <- Just <$> J.generateJob mj
+
+        when (currentJob /= expectedJob) $
+            recoverAll
+              (limitRetries 5 <> exponentialBackoff 100000 {-- 100 ms --})
+              (createOrUpdateJenkinsJob defaultJenkinsUser j h z)
+
   pure (syncables r)
+
+
+getJob :: Text -> Text -> Build -> JenkinsUrl -> HooksUrl -> IO (Maybe Text)
+getJob jenkinsUser auth b k h = do
+  let j = J.Job {
+      J.org = jenkinsUser
+    , J.oauth = auth
+    , J.jobName = buildName b
+    , J.jenkinsHost = k
+    , J.jenkinsHooks = h
+    }
+  e <- J.getJob_ j
+  pure $ rightToMaybe e
 
 -- | Log sync reporting for the specified projects.
 syncReport :: [Project a b] -> IO ()
@@ -128,17 +152,21 @@ createOrUpdateJenkinsJob defaultJenkinsUser j h p = do
   auth <- G.auth'
   jenkinsUser <- (maybe defaultJenkinsUser T.pack) <$> getEnv "JENKINS_USER"
   forM_ (builds p) $ \b ->
-    J.createOrUpdateJob J.ModJob {
-          J.jobreq = J.Job {
-                J.org = jenkinsUser
-              , J.oauth = auth
-              , J.jobName = buildName b
-              , J.jenkinsHost = j
-              , J.jenkinsHooks = h
-            }
-        , J.jobTemplate = template b
-        , J.params = toParams p $ replacements b
-        }
+    J.createOrUpdateJob . genModJob j h jenkinsUser auth p $ b
+
+genModJob :: JenkinsUrl -> HooksUrl -> Text -> Text -> Project a b -> Build -> J.ModJob
+genModJob j h jenkinsUser auth p b =
+  J.ModJob {
+    J.jobreq = J.Job {
+         J.org = jenkinsUser
+       , J.oauth = auth
+       , J.jobName = buildName b
+       , J.jenkinsHost = j
+       , J.jenkinsHooks = h
+       }
+    , J.jobTemplate = template b
+    , J.params = toParams p $ replacements b
+    }
 
 toParams :: Project a b -> [Replace] -> Text -> Maybe Text
 toParams p rs s = case s of

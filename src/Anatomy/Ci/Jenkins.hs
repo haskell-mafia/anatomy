@@ -7,8 +7,10 @@ module Anatomy.Ci.Jenkins (
   , JenkinsUrl (..)
   , HooksUrl (..)
   , getJob
+  , getJob_
   , createJob
   , updateJob
+  , renderJob
   , generateJob
   , createOrUpdateJob
   ) where
@@ -16,7 +18,6 @@ module Anatomy.Ci.Jenkins (
 import           Anatomy.Data
 
 import qualified Data.ByteString as B hiding (unpack, pack)
-import qualified Data.ByteString.Char8 as B (unpack)
 import qualified Data.ByteString.Lazy as BL hiding (unpack, pack)
 import           Data.Text (Text)
 import qualified Data.Text as T
@@ -111,10 +112,15 @@ modifyJob url respHandler modjob = do
         putStrLn . show . responseBody $ res
         exitFailure
 
-generateJob :: ModJob -> IO ()
+renderJob :: ModJob -> IO ()
+renderJob modjob =
+  generateJob modjob >>=
+    T.putStrLn
+
+generateJob :: ModJob -> IO Text
 generateJob modjob = do
   res <- mkBody (params modjob) (jobTemplate modjob)
-  putStrLn . B.unpack $ res
+  pure . T.decodeUtf8 $ res
 
 createOrUpdateJob :: ModJob -> IO ()
 createOrUpdateJob modjob = do
