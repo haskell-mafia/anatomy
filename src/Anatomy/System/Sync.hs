@@ -12,10 +12,12 @@ import           Anatomy.System.Report
 import           Control.Monad.Trans.Either
 import           Control.Monad.IO.Class
 
-import qualified Ci.GitHub as G
-import qualified Ci.Jenkins as J
+import qualified Anatomy.Ci.GitHub as G
+import           Anatomy.Ci.Jenkins (JenkinsUrl (..), HooksUrl (..))
+import qualified Anatomy.Ci.Jenkins as J
 
-import           Data.Text as T
+import           Data.Text (Text)
+import qualified Data.Text as T
 
 import           Github.Repos
 import qualified Github.Organizations as GO
@@ -32,12 +34,25 @@ import           System.Posix.Env (getEnv)
 --   specified by "team" argument. This is normally owners and extra
 --   teams are specified as permissions elsewhere (but that bit isn't
 --   implemented yet ...)
-sync :: T.Text -> (a -> Maybe GithubTemplate) -> Org -> Team -> Team -> [Project a b] -> SyncMode -> EitherT SyncError IO [Project a b]
-sync defaultJenkinsUser templateName o t everyone ps m = do
-  ss <- bimapEitherT SyncReportError id $ syncables <$> report o ps
+sync ::
+  Text
+  -> JenkinsUrl
+  -> HooksUrl
+  -> (a -> Maybe GithubTemplate)
+  -> Org
+  -> Team
+  -> Team
+  -> [Project a b]
+  -> SyncMode
+  -> EitherT SyncError IO [Project a b]
+sync defaultJenkinsUser j h templateName o t everyone ps m = do
+  r <- bimapEitherT SyncReportError id $ report o ps
   when (m == Sync) $ do
-    forM_ ss $ create defaultJenkinsUser templateName o t everyone
-  pure ss
+    forM_ (syncables r) $
+      create h templateName o t everyone
+    forM_ (jenkinsable r) $
+      liftIO . createOrUpdateJenkinsJob defaultJenkinsUser j h
+  pure (syncables r)
 
 -- | Log sync reporting for the specified projects.
 syncReport :: [Project a b] -> IO ()
@@ -56,8 +71,17 @@ syncables rs =
     Report Nothing (Just _) -> []
     Report (Just p) Nothing -> [p]
 
-create :: T.Text -> (a -> Maybe GithubTemplate) -> Org -> Team -> Team -> Project a b -> EitherT SyncError IO ()
-create defaultJenkinsUser templateName o t everyone p = do
+jenkinsable :: [Report a b] -> [Project a b]
+jenkinsable rs =
+  rs >>= \r ->
+    case r of
+      Report (Just p) _ ->
+        [p]
+      Report _ _ ->
+        []
+
+create :: HooksUrl -> (a -> Maybe GithubTemplate) -> Org -> Team -> Team -> Project a b -> EitherT SyncError IO ()
+create h templateName o t everyone p = do
   auth <- liftIO G.auth
   void . bimapEitherT SyncCreateError id . EitherT $
       do
@@ -74,64 +98,49 @@ create defaultJenkinsUser templateName o t everyone p = do
           }
         applyTemplate r p $ templateName (cls p)
         addExtraTeam (Just auth) r
-        setupCi r defaultJenkinsUser o p
+        case r of
+          Right _ ->
+            setupHooks o h p
+          Left _ ->
+            pure ()
         return r
       where
-        addExtraTeam auth (Right _) = void $ GO.addTeamToRepo auth teamId (unpack $ orgName o) (unpack $ name p)
-        addExtraTeam _ _ = return ()
-        teamId = teamGithubId everyone
+        addExtraTeam auth (Right _) =
+          void $ GO.addTeamToRepo auth teamId (T.unpack $ orgName o) (T.unpack $ name p)
+        addExtraTeam _ _ =
+          return ()
+        teamId =
+          teamGithubId everyone
 
-
-setupCi :: Either Error Repo -> T.Text -> Org -> Project a b -> IO ()
-setupCi (Right _) defaultJenkinsUser o p = do
-  createJenkinsJob defaultJenkinsUser p
-  setupHooks o p
-setupCi _ _ _ _ = return ()
-
-
-setupHooks :: Org -> Project a b -> IO ()
-setupHooks o p = do
+setupHooks :: Org -> HooksUrl -> Project a b -> IO ()
+setupHooks o h p = do
     auth <- G.auth
-    G.hook auth (T.unpack $ orgName o) (T.unpack $ name p)
+    G.hook h auth (T.unpack $ orgName o) (T.unpack $ name p)
 
-
-createJenkinsJob :: T.Text -> Project a b -> IO ()
-createJenkinsJob defaultJenkinsUser p = do
+createOrUpdateJenkinsJob :: Text -> JenkinsUrl -> HooksUrl -> Project a b -> IO ()
+createOrUpdateJenkinsJob defaultJenkinsUser j h p = do
   auth <- G.auth'
-  jenkinsUser <- fromMaybe (T.unpack defaultJenkinsUser) <$> getEnv "JENKINS_USER"
-  J.createJob J.ModJob {
-      J.jobreq = J.Job {
-          J.org = jenkinsUser,
-          J.oauth = auth,
-          J.jobName = T.unpack $ name p
-        },
-      J.templatefile = jobTemplate,
-      J.params = toLookup p "./bin/ci"
-  }
-  J.createJob J.ModJob {
-      J.jobreq = J.Job {
-          J.org = jenkinsUser,
-          J.oauth = auth,
-          J.jobName = (T.unpack $ name p) <> ".branches"
-        },
-      J.templatefile = jobTemplateBranch,
-      J.params = toLookup p "./bin/ci.branches"
-  }
+  jenkinsUser <- (maybe defaultJenkinsUser T.pack) <$> getEnv "JENKINS_USER"
+  forM_ (builds p) $ \b ->
+    J.createOrUpdateJob J.ModJob {
+          J.jobreq = J.Job {
+                J.org = jenkinsUser
+              , J.oauth = auth
+              , J.jobName = name p
+              , J.jenkinsHost = j
+              , J.jenkinsHooks = h
+            }
+        , J.jobTemplate = template b
+        , J.params = toParams p $ replacements b
+        }
 
-
-toLookup :: Project a b -> CICommand -> [Char] -> Maybe [Char]
-toLookup p cmd s = case s of
-  "project"         -> Just $ T.unpack $ name p
-  "env_CI_COMMAND"  -> Just $ T.unpack cmd
-  _                 -> Nothing
-
-type CICommand = Text
-
-jobTemplate :: [Char]
-jobTemplate = "lib/ci/templates/job.xml"
-
-jobTemplateBranch :: [Char]
-jobTemplateBranch = "lib/ci/templates/branches.xml"
+toParams :: Project a b -> [Replace] -> Text -> Maybe Text
+toParams p rs s = case s of
+  "project" ->
+    Just $ name p
+  _ ->
+    fmap replaceValue . flip P.find rs $ \r ->
+      replaceKey r == s
 
 applyTemplate :: Either Error Repo -> Project a b -> Maybe GithubTemplate -> IO ()
 applyTemplate (Right _) p (Just tmpName) =
@@ -139,5 +148,6 @@ applyTemplate (Right _) p (Just tmpName) =
 applyTemplate _ _ _ = return ()
 
 pushTemplate :: Project a b -> GithubTemplate -> IO ()
-pushTemplate p template = void $ withSystemTempDirectory "template_repo"
-                  (\dir -> system $ P.intercalate " " ["./bin/clone_template", dir, T.unpack . githubTemplate $ template, unpack $ name p])
+pushTemplate p t =
+  void . withSystemTempDirectory "template_repo" $ \dir ->
+    system $ P.intercalate " " ["./bin/clone_template", dir, T.unpack . githubTemplate $ t, T.unpack $ name p]
