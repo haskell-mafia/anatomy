@@ -16,6 +16,7 @@ module Anatomy.Data (
   , BuildSkeleton (..)
   , Replace (..)
   , BuildTemplate (..)
+  , XmlDiffError (..)
   , renderReportError
   , renderSyncError
   , project
@@ -121,12 +122,17 @@ data ReportError =
 data SyncError =
     SyncReportError ReportError
   | SyncCreateError Error
+  | SyncXmlParseError Build XmlDiffError
   deriving (Show)
 
 data SyncMode =
     Diagnose
   | Sync
   | SyncUpdate
+  deriving (Eq, Show)
+
+data XmlDiffError =
+    XmlParseError Text
   deriving (Eq, Show)
 
 renderReportError :: ReportError -> Text
@@ -142,6 +148,8 @@ renderSyncError err =
       renderReportError e
     SyncCreateError e ->
       renderGithubError e
+    SyncXmlParseError b (XmlParseError e) ->
+      "There was an error parsing the job XML for " <> buildName b <> ": " <> e
 
 renderGithubError :: Error -> Text
 renderGithubError err =

@@ -17,6 +17,7 @@ import           Control.Retry
 import qualified Anatomy.Ci.GitHub as G
 import           Anatomy.Ci.Jenkins (JenkinsUrl (..), HooksUrl (..))
 import qualified Anatomy.Ci.Jenkins as J
+import           Anatomy.System.XmlDiff
 
 import           Data.Text (Text)
 import qualified Data.Text as T
@@ -56,21 +57,33 @@ sync defaultJenkinsUser j h templateName o t everyone ps m = do
     forM_ (jenkinsable r) $ \z -> do
       liftIO $ threadDelay 200000 {-- 200 ms --}
 
-      forM (builds z) $ \b -> liftIO $ do
+      forM (builds z) $ \b -> EitherT . liftIO $ do
         auth <- G.auth'
         jenkinsUser <- (maybe defaultJenkinsUser T.pack) <$> getEnv "JENKINS_USER"
 
-        currentJob <- getJob jenkinsUser auth b j h
+        currentJob <- recoverAll (limitRetries 5 <> exponentialBackoff 100000 {-- 100 ms --})
+          $ getJob jenkinsUser auth b j h
 
-        let mj = genModJob j h jenkinsUser auth z b
-        expectedJob' <- J.generateJob mj
-
-        let expectedJob = T.strip $ T.replace "&quot;" "\"" expectedJob'
-
-        when (currentJob /= Just expectedJob) $
-            recoverAll
-              (limitRetries 5 <> exponentialBackoff 100000 {-- 100 ms --})
-              (createOrUpdateJenkinsJob defaultJenkinsUser j h z)
+        let createOrUpdate =
+              recoverAll
+                (limitRetries 5 <> exponentialBackoff 100000 {-- 100 ms --})
+                (createOrUpdateJenkinsJob defaultJenkinsUser j h z)
+        case currentJob of
+          Nothing ->
+            Right <$> createOrUpdate
+          Just currentJob' -> do
+            let mj = genModJob j h jenkinsUser auth z b
+            expectedJob <- J.generateJob mj
+            case xmlDiffText currentJob' expectedJob of
+              Left e ->
+                pure . Left $ SyncXmlParseError b e
+              Right (Right ()) ->
+                pure $ Right ()
+              Right (Left (XmlDiff e (n1, n2))) -> do
+                putStrLn . T.unpack $ "Job '" <> buildName b <> "' has changed at " <> elementsPath e
+                 <> " from " <> (T.pack . show) n1
+                 <> " to " <> (T.pack . show) n2
+                Right <$> createOrUpdate
 
   pure (syncables r)
 
