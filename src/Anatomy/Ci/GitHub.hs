@@ -11,7 +11,7 @@ module Anatomy.Ci.GitHub (
   , stats
   ) where
 
-import           Anatomy.Ci.Jenkins (HooksUrl (..))
+import           Anatomy.Data (HooksUrl (..))
 
 import           Control.Concurrent.Async
 
