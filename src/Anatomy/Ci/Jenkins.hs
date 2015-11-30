@@ -4,8 +4,7 @@
 module Anatomy.Ci.Jenkins (
     Job (..)
   , ModJob (..)
-  , JenkinsUrl (..)
-  , HooksUrl (..)
+  , jauth
   , getJob
   , getJob_
   , createJob
@@ -16,6 +15,7 @@ module Anatomy.Ci.Jenkins (
   ) where
 
 import           Anatomy.Data
+import qualified Anatomy.Ci.GitHub as G
 
 import qualified Data.ByteString as B hiding (unpack, pack)
 import qualified Data.ByteString.Lazy as BL hiding (unpack, pack)
@@ -38,15 +38,6 @@ import           System.FilePath ((</>))
 import           System.IO
 import           System.Posix.Env
 
-newtype JenkinsUrl =
-  JenkinsUrl {
-      jenkinsUrl :: Text
-    } deriving (Eq, Show)
-
-newtype HooksUrl =
-  HooksUrl {
-      hooksUrl :: Text
-    } deriving (Eq, Show)
 
 data Job = Job {
     org :: Text
@@ -61,6 +52,11 @@ data ModJob = ModJob {
   , jobTemplate :: BuildTemplate
   , params :: Text -> Maybe Text
   }
+
+jauth :: IO Text
+jauth = getEnv "JENKINS_AUTH" >>= \t -> case t of
+  Nothing -> G.auth'
+  Just a -> pure $ T.pack a
 
 getJob_ :: Job -> IO (Either (Int, Text) Text)
 getJob_ job = do

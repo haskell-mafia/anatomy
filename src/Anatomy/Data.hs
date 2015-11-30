@@ -17,6 +17,8 @@ module Anatomy.Data (
   , Replace (..)
   , BuildTemplate (..)
   , XmlDiffError (..)
+  , JenkinsUrl (..)
+  , HooksUrl (..)
   , renderReportError
   , renderSyncError
   , project
@@ -28,6 +30,16 @@ import qualified Data.Text as T
 import           Github.Data
 
 import           P
+
+newtype JenkinsUrl =
+  JenkinsUrl {
+      jenkinsUrl :: Text
+    } deriving (Eq, Show)
+
+newtype HooksUrl =
+  HooksUrl {
+      hooksUrl :: Text
+    } deriving (Eq, Show)
 
 newtype Org =
   Org {

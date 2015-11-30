@@ -15,7 +15,6 @@ import           Control.Monad.IO.Class
 import           Control.Retry
 
 import qualified Anatomy.Ci.GitHub as G
-import           Anatomy.Ci.Jenkins (JenkinsUrl (..), HooksUrl (..))
 import qualified Anatomy.Ci.Jenkins as J
 import           Anatomy.System.XmlDiff
 
@@ -166,7 +165,7 @@ setupCi o defaultJenkinsUser j h p = do
 
 createOrUpdateJenkinsJob :: Text -> JenkinsUrl -> HooksUrl -> Project a b -> IO ()
 createOrUpdateJenkinsJob defaultJenkinsUser j h p = do
-  auth <- G.auth'
+  auth <- J.jauth
   jenkinsUser <- (maybe defaultJenkinsUser T.pack) <$> getEnv "JENKINS_USER"
   forM_ (builds p) $ \b ->
     J.createOrUpdateJob . genModJob j h jenkinsUser auth p $ b
