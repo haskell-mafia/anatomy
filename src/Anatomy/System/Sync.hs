@@ -66,7 +66,7 @@ sync defaultJenkinsUser j h templateName o t everyone ps m = do
         let createOrUpdate =
               recoverAll
                 (limitRetries 5 <> exponentialBackoff 100000 {-- 100 ms --})
-                (createOrUpdateJenkinsJob defaultJenkinsUser j h z)
+                (createOrUpdateJenkinsJob defaultJenkinsUser j h z b)
         case currentJob of
           Nothing ->
             Right <$> createOrUpdate
@@ -161,14 +161,14 @@ setupCi :: Org -> Text -> JenkinsUrl -> HooksUrl -> Project a b -> IO ()
 setupCi o defaultJenkinsUser j h p = do
     auth <- G.auth
     G.hook h auth (T.unpack $ orgName o) (T.unpack $ name p)
-    createOrUpdateJenkinsJob defaultJenkinsUser j h p
+    forM_ (builds p) $
+      createOrUpdateJenkinsJob defaultJenkinsUser j h p
 
-createOrUpdateJenkinsJob :: Text -> JenkinsUrl -> HooksUrl -> Project a b -> IO ()
-createOrUpdateJenkinsJob defaultJenkinsUser j h p = do
+createOrUpdateJenkinsJob :: Text -> JenkinsUrl -> HooksUrl -> Project a b -> Build -> IO ()
+createOrUpdateJenkinsJob defaultJenkinsUser j h p b = do
   auth <- J.jauth
   jenkinsUser <- (maybe defaultJenkinsUser T.pack) <$> getEnv "JENKINS_USER"
-  forM_ (builds p) $ \b ->
-    J.createOrUpdateJob . genModJob j h jenkinsUser auth p $ b
+  J.createOrUpdateJob $ genModJob j h jenkinsUser auth p b
 
 genModJob :: JenkinsUrl -> HooksUrl -> Text -> Text -> Project a b -> Build -> J.ModJob
 genModJob j h jenkinsUser auth p b =
