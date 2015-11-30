@@ -14,6 +14,7 @@ module Anatomy.Ci.GitHub (
 import           Anatomy.Data (HooksUrl (..))
 
 import           Control.Concurrent.Async
+import           Control.Retry
 
 import qualified Data.Map as M
 import           Data.String (String)
@@ -87,7 +88,9 @@ hooks :: HooksUrl -> GithubAuth -> String -> IO ()
 hooks url oauth org = do
   repos' <- organizationRepos' (Just oauth) org >>= handler
   forM_ repos' $ \r ->
-    hook url oauth (githubOwnerLogin . repoOwner $ r) (repoName r)
+    recoverAll
+      (limitRetries 5 <> exponentialBackoff 100000 {-- 100 ms --})
+      (hook url oauth (githubOwnerLogin . repoOwner $ r) (repoName r))
 
 -- | Register all hooks for specified project
 hook :: HooksUrl -> GithubAuth -> String -> String -> IO ()
