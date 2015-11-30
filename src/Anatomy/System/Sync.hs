@@ -57,8 +57,8 @@ sync defaultJenkinsUser j h templateName o t everyone ps m = do
       liftIO $ threadDelay 200000 {-- 200 ms --}
 
       forM (builds z) $ \b -> EitherT . liftIO $ do
-        auth <- G.auth'
         jenkinsUser <- (maybe defaultJenkinsUser T.pack) <$> getEnv "JENKINS_USER"
+        auth <- J.jauth
 
         currentJob <- recoverAll (limitRetries 5 <> exponentialBackoff 100000 {-- 100 ms --})
           $ getJob jenkinsUser auth b j h
