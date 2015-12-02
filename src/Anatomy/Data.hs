@@ -2,9 +2,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Anatomy.Data (
     Org (..)
-  , GithubTemplate(..)
+  , GithubTemplate (..)
+  , GithubAuth (..)
   , Team (..)
   , Project (..)
+  , ProjectName (..)
   , Status (..)
   , Variant (..)
   , Report (..)
@@ -17,28 +19,76 @@ module Anatomy.Data (
   , Replace (..)
   , BuildTemplate (..)
   , XmlDiffError (..)
-  , JenkinsUrl (..)
   , HooksUrl (..)
+  , JenkinsConfiguration (..)
+  , JenkinsUrl (..)
+  , JenkinsUser (..)
+  , JenkinsAuth (..)
+  , SyncBuildError (..)
+  , GithubCreateError (..)
+  , HipchatToken (..)
+  , HipchatRoom (..)
   , renderReportError
   , renderSyncError
+  , renderGithubError
+  , renderBuildError
+  , renderXmlDiffError
   , project
+  , retry
+  , retrye
   ) where
+
+import           Control.Exception.Base (SomeException)
+import           Control.Retry
 
 import           Data.Text (Text)
 import qualified Data.Text as T
 
+import           Github.Auth
 import           Github.Data
 
 import           P
+
+import           System.IO (IO)
+
+import           Control.Monad.Trans.Either
+
+retry :: IO a -> IO a
+retry =
+  recoverAll (limitRetries 5 <> exponentialBackoff 100000 {-- 100 ms --})
+
+retrye :: EitherT e IO a -> EitherT e IO a
+retrye e =
+  EitherT $ retrying
+    (limitRetries 5 <> exponentialBackoff 100000 {-- 100 ms --})
+    (\_ x -> pure $ isLeft x)
+    (runEitherT e)
+
+newtype HooksUrl =
+  HooksUrl {
+      hooksUrl :: Text
+    } deriving (Eq, Show)
 
 newtype JenkinsUrl =
   JenkinsUrl {
       jenkinsUrl :: Text
     } deriving (Eq, Show)
 
-newtype HooksUrl =
-  HooksUrl {
-      hooksUrl :: Text
+data JenkinsConfiguration =
+  JenkinsConfiguration {
+      jenkinsUser :: JenkinsUser
+    , jenkinsOAuth :: JenkinsAuth
+    , jenkinsHost :: JenkinsUrl
+    } deriving (Eq, Show)
+
+newtype JenkinsUser =
+  JenkinsUser {
+      renderUser :: Text
+    } deriving (Eq, Show)
+
+newtype JenkinsAuth =
+  JenkinsAuth {
+      jenkinsAuth :: Text
     } deriving (Eq, Show)
 
 newtype Org =
@@ -51,6 +101,16 @@ newtype GithubTemplate =
       githubTemplate ::  Text
     } deriving (Show, Eq)
 
+newtype HipchatToken =
+  HipchatToken {
+      hipchatToken ::  Text
+    } deriving (Show, Eq)
+
+newtype HipchatRoom =
+  HipchatRoom {
+      hipchatRoom ::  Text
+    } deriving (Show, Eq)
+
 data Team =
   Team {
       teamName :: Text
@@ -59,13 +119,18 @@ data Team =
 
 data Project a b =
   Project {
-      name :: Text
+      name :: ProjectName
     , description :: Text
     , status :: Status
     , cls :: a
     , category :: Maybe b
     , teams :: [Team]
     , builds :: [Build]
+    } deriving (Eq, Show)
+
+newtype ProjectName =
+  ProjectName {
+      renderName :: Text
     } deriving (Eq, Show)
 
 data Build =
@@ -95,7 +160,7 @@ newtype BuildTemplate =
 
 project :: Text -> Text -> Status -> a -> [BuildSkeleton] -> Project a b
 project n d s c b =
-  Project n d s c Nothing [] ((\(BuildSkeleton w r t) -> Build (w n) r t) <$> b)
+  Project (ProjectName n) d s c Nothing [] ((\(BuildSkeleton w r t) -> Build (w n) r t) <$> b)
 
 data Status =
     Idea             -- A readme.
@@ -131,11 +196,21 @@ data ReportError =
   GitHubError Error
   deriving (Show)
 
+data GithubCreateError =
+    CreateRepoError Error
+  | AddTeamError SomeException
+  deriving Show
+
 data SyncError =
     SyncReportError ReportError
   | SyncCreateError Error
-  | SyncXmlParseError Build XmlDiffError
-  deriving (Show)
+  | SyncGithubError GithubCreateError
+  | SyncBuildError SyncBuildError
+  deriving Show
+
+data SyncBuildError =
+  XmlError Build XmlDiffError
+  deriving (Eq, Show)
 
 data SyncMode =
     Diagnose
@@ -144,7 +219,7 @@ data SyncMode =
   deriving (Eq, Show)
 
 data XmlDiffError =
-    XmlParseError Text
+  XmlParseError Text
   deriving (Eq, Show)
 
 renderReportError :: ReportError -> Text
@@ -160,8 +235,18 @@ renderSyncError err =
       renderReportError e
     SyncCreateError e ->
       renderGithubError e
-    SyncXmlParseError b (XmlParseError e) ->
-      "There was an error parsing the job XML for " <> buildName b <> ": " <> e
+    SyncGithubError e ->
+      renderGithubCreateError e
+    SyncBuildError e ->
+      renderBuildError e
+
+renderGithubCreateError :: GithubCreateError -> Text
+renderGithubCreateError err =
+  case err of
+    CreateRepoError e ->
+      "Error creating github repository: " <> renderGithubError e
+    AddTeamError e ->
+      "Error adding team to repository: " <> T.pack (show e)
 
 renderGithubError :: Error -> Text
 renderGithubError err =
@@ -174,3 +259,15 @@ renderGithubError err =
       "An error occured trying to process json response from github: " <> T.pack s
     UserError s ->
       "We made an invalid request to github, this is likely a bug in the calling code (https://github.com/ambiata/anatomy/issues): " <> T.pack s
+
+renderBuildError :: SyncBuildError -> Text
+renderBuildError e =
+  case e of
+    XmlError b t ->
+      "Failed syncing build [" <> buildName b <> "] with: " <> renderXmlDiffError t
+
+renderXmlDiffError :: XmlDiffError -> Text
+renderXmlDiffError e =
+  case e of
+    XmlParseError t ->
+      "Failed to parse xml [" <> t <> "]."

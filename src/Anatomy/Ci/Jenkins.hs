@@ -3,11 +3,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
 module Anatomy.Ci.Jenkins (
-    Job (..)
+    JobName (..)
   , ModJob (..)
-  , jauth
   , getJob
-  , getJob_
+  , putStrJob
   , createJob
   , updateJob
   , renderJob
@@ -43,28 +42,20 @@ import           System.IO
 import           System.Posix.Env
 
 
-data Job = Job {
-    org :: Text
-  , oauth :: Text
-  , jobName :: Text
-  , jenkinsHost :: JenkinsUrl
-  , jenkinsHooks :: HooksUrl
-  }
+newtype JobName =
+  JobName {
+      jobName :: Text
+    } deriving (Eq, Show)
 
 data ModJob = ModJob {
-    jobreq :: Job
+    modName :: JobName
   , jobTemplate :: BuildTemplate
   , params :: Text -> Maybe Text
   }
 
-jauth :: IO Text
-jauth = getEnv "JENKINS_AUTH" >>= \t -> case t of
-  Nothing -> G.auth'
-  Just a -> pure $ T.pack a
-
-getJob_ :: Job -> IO (Either (Int, Text) Text)
-getJob_ job = do
-  res <- https (T.pack $ (T.unpack . jenkinsUrl . jenkinsHost $ job) </> "job" </> T.unpack (jobName job) </> "config.xml") (org job) (oauth job) rGet
+getJob :: JenkinsConfiguration -> JobName -> IO (Either (Int, Text) Text)
+getJob conf job = do
+  res <- https (T.pack $ (T.unpack . jenkinsUrl . jenkinsHost $ conf) </> "job" </> T.unpack (jobName job) </> "config.xml") (jenkinsUser conf) (jenkinsOAuth conf) rGet
   let body = responseBody res
       b = T.decodeUtf8 . BL.toStrict $ body
   return $ case (statusCode . responseStatus) res of
@@ -73,9 +64,9 @@ getJob_ job = do
     n   ->
       Left (n, b)
 
-getJob :: Job -> IO ()
-getJob job =
-   getJob_ job >>= \x ->
+putStrJob :: JenkinsConfiguration -> JobName -> IO ()
+putStrJob conf name =
+   getJob conf name >>= \x ->
      case x of
        Right resp ->
          putStrLn . T.unpack $ resp
@@ -84,26 +75,32 @@ getJob job =
          putStrLn . T.unpack $ resp
          exitFailure
 
-createJob :: ModJob -> IO ()
-createJob =
-  modifyJob ("/createItem?name=" <>) $ \x -> case x of
-    Right job -> "Created job [" <> job <> "]"
-    Left n -> "Couldn't create job [" <> n <> "]"
+createJob :: JenkinsConfiguration -> ModJob -> IO ()
+createJob conf =
+  modifyJob conf ("/createItem?name=" <>) $ \x ->
+    case x of
+      Right job ->
+        "Created job [" <> job <> "]"
+      Left n ->
+        "Couldn't create job [" <> n <> "]"
 
-updateJob :: ModJob -> IO ()
-updateJob =
-  modifyJob (\job -> T.pack $ "/job" </> T.unpack job </> "config.xml") $ \x -> case x of
-    Right job -> "Updated job [" <> job <> "]"
-    Left n -> "Couldn't update job [" <> n <> "]"
+updateJob :: JenkinsConfiguration -> ModJob -> IO ()
+updateJob conf =
+  modifyJob conf (\job -> T.pack $ "/job" </> T.unpack job </> "config.xml") $ \x ->
+    case x of
+      Right job ->
+        "Updated job [" <> job <> "]"
+      Left n ->
+        "Couldn't update job [" <> n <> "]"
 
-modifyJob :: (Text -> Text) -> (Either Text Text -> Text) -> ModJob -> IO ()
-modifyJob url respHandler modjob = do
-  let job = jobreq modjob
-      baseUrl = jenkinsUrl . jenkinsHost $ job
+modifyJob :: JenkinsConfiguration -> (Text -> Text) -> (Either Text Text -> Text) -> ModJob -> IO ()
+modifyJob conf url respHandler modjob = do
+  let job = modName modjob
+      baseUrl = jenkinsUrl . jenkinsHost $ conf
 
   body <- mkBody (params modjob) (jobTemplate modjob)
 
-  https ((<>) baseUrl . url . jobName $ job) (org job) (oauth job) (rPost body . rXml) >>= \res ->
+  https ((<>) baseUrl . url . jobName $ job) (jenkinsUser conf) (jenkinsOAuth conf) (rPost body . rXml) >>= \res ->
     case (statusCode . responseStatus) res of
       200 ->
         T.putStrLn . respHandler . Right . jobName $ job
@@ -122,37 +119,43 @@ generateJob modjob = do
   res <- mkBody (params modjob) (jobTemplate modjob)
   pure . T.decodeUtf8 $ res
 
-createOrUpdateJob :: ModJob -> IO ()
-createOrUpdateJob modjob = do
-  getJob_ (jobreq modjob) >>= \x -> case x of
-    Left _  -> createJob modjob
-    Right _ ->
-      -- Unfortunately there are race conditions in jenkins when updating a running job so we're a little careful here
-      isJobRunning (jobreq modjob) >>= \case
-        Left l -> do
-          T.putStrLn $ "Error fetching job status " <> l
-          exitFailure
-        Right True ->
-          T.putStrLn $ "Could not update " <> (jobName . jobreq) modjob <> " as it is currently running"
-        Right False ->
-          updateJob modjob
+createOrUpdateJob :: JenkinsConfiguration -> ModJob -> IO ()
+createOrUpdateJob conf modjob = do
+  getJob conf (modName modjob) >>= \x ->
+    case x of
+      Left _ ->
+        createJob conf modjob
+      Right _ ->
+        -- Unfortunately there are race conditions in jenkins when updating a running job so we're a little careful here
+        isJobRunning conf (modName modjob) >>= \case
+          Left l -> do
+            T.putStrLn $ "Error fetching job status " <> l
+            exitFailure
+          Right True ->
+            T.putStrLn $ "Could not update " <> (jobName . modName $ modjob) <> " as it is currently running"
+          Right False ->
+            updateJob conf modjob
 
-isJobRunning :: Job -> IO (Either Text Bool)
-isJobRunning job = do
-  res <- https (T.pack $ (T.unpack . jenkinsUrl . jenkinsHost $ job) </> "job" </> T.unpack (jobName job) </> "lastBuild/api/json?tree=result") (org job) (oauth job) rGet
+isJobRunning :: JenkinsConfiguration -> JobName -> IO (Either Text Bool)
+isJobRunning conf n = do
+  res <- https
+    ((jenkinsUrl . jenkinsHost $ conf) <> "/job/" <> jobName n <> "/lastBuild/api/json?tree=result")
+    (jenkinsUser conf)
+    (jenkinsOAuth conf)
+    rGet
   return $ case (statusCode . responseStatus) res of
     200 ->
       first T.pack . fmap (\(A.Object o) -> HM.lookup "result" o == Just A.Null) . A.eitherDecode $ responseBody res
     404 ->
-      Left $ "No builds could be found for [" <> jobName job <> "]"
-    n ->
-      Left $ "Invalid status " <> (T.pack . show) n
+      Left $ "No builds could be found for [" <> jobName n <> "]"
+    i ->
+      Left $ "Invalid status " <> (T.pack . show) i
 
-https :: Text ->  Text -> Text -> (Request -> Request) -> IO (Response BL.ByteString)
-https url user password xform =
+https :: Text -> JenkinsUser -> JenkinsAuth -> (Request -> Request) -> IO (Response BL.ByteString)
+https url user auth xform =
   parseUrl (T.unpack url) >>= \req ->
     withManager (mkManagerSettings (TLSSettingsSimple True False True) Nothing) . httpLbs $
-      (applyBasicAuth (T.encodeUtf8 user) (T.encodeUtf8 password) $ xform (req {
+      (applyBasicAuth (T.encodeUtf8 . renderUser $ user) (T.encodeUtf8 . jenkinsAuth $ auth) $ xform (req {
           checkStatus = const . const . const $ Nothing
         }))
 
