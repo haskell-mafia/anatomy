@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
@@ -12,6 +13,7 @@ module Anatomy.Ci.Jenkins (
   , renderJob
   , generateJob
   , createOrUpdateJob
+  , isJobRunning
   ) where
 
 import           Anatomy.Data
@@ -19,6 +21,8 @@ import qualified Anatomy.Ci.GitHub as G
 
 import qualified Data.ByteString as B hiding (unpack, pack)
 import qualified Data.ByteString.Lazy as BL hiding (unpack, pack)
+import qualified Data.Aeson as A
+import qualified Data.HashMap.Strict as HM
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -122,7 +126,27 @@ createOrUpdateJob :: ModJob -> IO ()
 createOrUpdateJob modjob = do
   getJob_ (jobreq modjob) >>= \x -> case x of
     Left _  -> createJob modjob
-    Right _ -> updateJob modjob
+    Right _ ->
+      -- Unfortunately there are race conditions in jenkins when updating a running job so we're a little careful here
+      isJobRunning (jobreq modjob) >>= \case
+        Left l -> do
+          T.putStrLn $ "Error fetching job status " <> l
+          exitFailure
+        Right True ->
+          T.putStrLn $ "Could not update " <> (jobName . jobreq) modjob <> " as it is currently running"
+        Right False ->
+          updateJob modjob
+
+isJobRunning :: Job -> IO (Either Text Bool)
+isJobRunning job = do
+  res <- https (T.pack $ (T.unpack . jenkinsUrl . jenkinsHost $ job) </> "job" </> T.unpack (jobName job) </> "lastBuild/api/json?tree=result") (org job) (oauth job) rGet
+  return $ case (statusCode . responseStatus) res of
+    200 ->
+      first T.pack . fmap (\(A.Object o) -> HM.lookup "result" o == Just A.Null) . A.eitherDecode $ responseBody res
+    404 ->
+      Left $ "No builds could be found for [" <> jobName job <> "]"
+    n ->
+      Left $ "Invalid status " <> (T.pack . show) n
 
 https :: Text ->  Text -> Text -> (Request -> Request) -> IO (Response BL.ByteString)
 https url user password xform =
