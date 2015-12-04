@@ -16,7 +16,6 @@ module Anatomy.Ci.Jenkins (
   ) where
 
 import           Anatomy.Data
-import qualified Anatomy.Ci.GitHub as G
 
 import qualified Data.ByteString as B hiding (unpack, pack)
 import qualified Data.ByteString.Lazy as BL hiding (unpack, pack)
@@ -65,8 +64,8 @@ getJob conf job = do
       Left (n, b)
 
 putStrJob :: JenkinsConfiguration -> JobName -> IO ()
-putStrJob conf name =
-   getJob conf name >>= \x ->
+putStrJob conf jn =
+   getJob conf jn >>= \x ->
      case x of
        Right resp ->
          putStrLn . T.unpack $ resp
@@ -147,7 +146,7 @@ isJobRunning conf n = do
     200 ->
       first T.pack . fmap (\(A.Object o) -> HM.lookup "result" o == Just A.Null) . A.eitherDecode $ responseBody res
     404 ->
-      Left $ "No builds could be found for [" <> jobName n <> "]"
+      Right False
     i ->
       Left $ "Invalid status " <> (T.pack . show) i
 

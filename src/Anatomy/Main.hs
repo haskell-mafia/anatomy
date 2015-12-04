@@ -70,7 +70,7 @@ anatomyMain buildInfoVersion templates org owners everyone projects = do
         github <- (GithubOAuth . T.unpack) <$> env "GITHUB_OAUTH"
         hookz <- HooksUrl <$> env "JENKINS_HOOKS"
         token <- HipchatToken <$> env "HIPCHAT_TOKEN"
-        room <- (HipchatRoom . T.pack) <$> (fromMaybe "eng" <$> liftIO (getEnv "HIPCHAT_ROOM_GITHUB"))
+        room <- liftIO $ (HipchatRoom . T.pack . fromMaybe "ci") <$> getEnv "HIPCHAT_ROOM_GITHUB"
         conf <- getJenkinsConfiguration
 
         r <- bimapEitherT SyncReportError id $
@@ -90,7 +90,7 @@ anatomyMain buildInfoVersion templates org owners everyone projects = do
         github <- (GithubOAuth . T.unpack) <$> env "GITHUB_OAUTH"
         hookz <- HooksUrl <$> env "JENKINS_HOOKS"
         token <- HipchatToken <$> env "HIPCHAT_TOKEN"
-        room <- (HipchatRoom . T.pack) <$> (fromMaybe "eng" <$> liftIO (getEnv "HIPCHAT_ROOM_GITHUB"))
+        room <- liftIO $ (HipchatRoom . T.pack . fromMaybe "ci") <$> getEnv "HIPCHAT_ROOM_GITHUB"
         conf <- getJenkinsConfiguration
 
         r <- bimapEitherT SyncReportError id $
@@ -102,13 +102,16 @@ anatomyMain buildInfoVersion templates org owners everyone projects = do
           syncHooks github token room org hookz projects
         bimapEitherT SyncBuildError id $
           syncBuilds conf projects
+        forM_ (newprojects r) $
+          liftIO . T.putStrLn . renderProjectReport
+
 
       -- done
       RefreshGithubCommand -> orDie renderSyncError $ do
         github <- (GithubOAuth . T.unpack) <$> env "GITHUB_OAUTH"
         hookz <- HooksUrl <$> env "JENKINS_HOOKS"
         token <- HipchatToken <$> env "HIPCHAT_TOKEN"
-        room <- (HipchatRoom . T.pack) <$> (fromMaybe "eng" <$> liftIO (getEnv "HIPCHAT_ROOM_GITHUB"))
+        room <- liftIO $ (HipchatRoom . T.pack . fromMaybe "ci") <$> getEnv "HIPCHAT_ROOM_GITHUB"
 
         -- Creating report here is only safe way to ensure hooks does not fail.
         r <- bimapEitherT SyncReportError id $
@@ -130,13 +133,13 @@ getJenkinsConfiguration = liftIO $ do
 
 env :: MonadIO m => Text -> m Text
 env var =
-  liftIO $ getEnv (T.unpack var) >>= \t ->
+  liftIO (getEnv (T.unpack var) >>= \t ->
     case t of
       Nothing ->
         T.hPutStrLn stderr ("Need to specify $" <> var) >>
           exitFailure
       Just a ->
-        pure $ T.pack a
+        pure $ T.pack a)
 
 anatomy :: Parser Command
 anatomy =

@@ -23,6 +23,8 @@ prop_xmldiff_test_diff =
     Right (Right ()) -> counterexample "XML was the same" False
     Right (Left (XmlDiff e _)) -> elementsPath e === "/xml/bar"
 
+prop_xmldiff_strip =
+  xmlDiffText "<xml><foo> a</foo></xml>" "<xml><foo>a</foo></xml>" === Right (Right ())
 
 return []
 tests :: IO Bool

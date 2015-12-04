@@ -15,7 +15,6 @@ module Anatomy.System.Sync (
 import           Anatomy.Data
 
 import           Control.Concurrent (threadDelay)
-import           Control.Exception.Base (SomeException)
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Either
 import           Control.Monad.IO.Class
@@ -38,9 +37,6 @@ import           System.IO.Temp
 import           System.Process
 
 
-
-
-
 -- | Create github repos for things listed in anatomy but don't have
 --   github repositories.  Repositories will be created with owner
 --   specified by "team" argument. This is normally owners and extra
@@ -48,16 +44,12 @@ import           System.Process
 --   implemented yet ...)
 syncRepositories :: GithubAuth -> (a -> Maybe GithubTemplate) -> Org -> Team -> Team -> [Project a b] -> EitherT GithubCreateError IO ()
 syncRepositories auth templateName o team everyone projects = do
-  forM_ projects $ \p -> do  -- FIX should this be lifted out?
--- create repository
-    createRepository auth templateName o team everyone p
--- create hooks
---    G.hook h token room auth o (name p)
--- create builds
+  forM_ projects $
+    createRepository auth templateName o team everyone
 
 syncHooks :: GithubAuth -> HipchatToken -> HipchatRoom -> Org -> HooksUrl -> [Project a b] -> EitherT Error IO ()
 syncHooks auth token room o h projects =
-  forM_ projects $ -- FIX should this be lifted out?
+  forM_ projects $
     G.hook h token room auth o . name
 
 syncBuilds :: JenkinsConfiguration -> [Project a b] -> EitherT SyncBuildError IO ()

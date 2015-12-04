@@ -12,7 +12,6 @@ module Anatomy.Ci.GitHub (
 
 import           Anatomy.Data
 
-import           Control.Concurrent.Async
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.Either
 import           Control.Retry
@@ -27,7 +26,6 @@ import qualified Data.Text.IO as T
 import           Github.Data.Definitions
 import           Github.GitData.Trees as GHTree
 import           Github.PullRequests
-import           Github.Auth
 import           Github.Repos
 import           Github.Repos.Hooks
 
@@ -37,7 +35,6 @@ import           System.Exit
 import           System.FilePath ((</>))
 import           System.FilePath.Glob
 import           System.IO
-import           System.Posix.Env
 
 -- | List all organization projects
 renderRepo :: Repo -> Text
@@ -83,16 +80,16 @@ hooks token room url oauth org = do
 
 -- | Register all hooks for specified project
 hook :: HooksUrl -> HipchatToken -> HipchatRoom -> GithubAuth -> Org -> ProjectName -> EitherT Error IO ()
-hook url token room oauth org project = void $ do
-  liftIO . T.putStrLn $ "Creating hooks for [" <> orgName org <> "/" <> renderName project <> "]"
+hook url token room oauth org p = do
+  liftIO . T.putStrLn $ "Creating hooks for [" <> orgName org <> "/" <> renderName p <> "]"
   forM_ [jenkins url, hipchat token room] $ \h ->
-    h oauth org project
+    h oauth org p
 
 -- | Register the jenkins hook
 -- |   schema: https://api.github.com/hooks
 jenkins :: HooksUrl -> GithubAuth -> Org -> ProjectName -> EitherT Error IO Hook
-jenkins url oauth org project =
-  EitherT $ createHook oauth (s orgName org) (s renderName project) "jenkins" (M.fromList [
+jenkins url oauth org p =
+  EitherT $ createHook oauth (s orgName org) (s renderName p) "jenkins" (M.fromList [
        ("jenkins_hook_url", (T.unpack (hooksUrl url) </> "github-webhook/"))
      ]) (Just [
        "push"
@@ -101,8 +98,8 @@ jenkins url oauth org project =
 -- | Filter the list of files in a specified Github project (at the HEAD)
 -- |  NOTE: This is not optimized and will retrieve the entire git tree first
 files :: GithubAuth -> Org -> ProjectName -> String -> IO [String]
-files oauth org project fileGlob = do
-  ghTree <- GHTree.nestedTree (Just oauth) (s orgName org) (s renderName project) "HEAD" >>= handler
+files oauth org p fileGlob = do
+  ghTree <- GHTree.nestedTree (Just oauth) (s orgName org) (s renderName p) "HEAD" >>= handler
   let pattern = compile fileGlob
   return . filter (match pattern) . fmap gitTreePath . treeGitTrees $ ghTree
 
@@ -113,8 +110,8 @@ s f =
 -- | Register the hipchat hook
 -- |   schema: https://api.github.com/hooks
 hipchat :: HipchatToken -> HipchatRoom -> GithubAuth -> Org -> ProjectName -> EitherT Error IO Hook
-hipchat token room oauth org project =
-  EitherT $ createHook oauth (s orgName org) (s renderName project) "hipchat" (M.fromList [
+hipchat token room oauth org p =
+  EitherT $ createHook oauth (s orgName org) (s renderName p) "hipchat" (M.fromList [
       ("auth_token", s hipchatToken token)
     , ("room", s hipchatRoom room)
 --    , ("restrict_to_branch", "")
@@ -151,8 +148,8 @@ hipchat token room oauth org project =
     ]) (Just True)
 
 repos :: GithubAuth -> String -> IO [String]
-repos oauth name =
-  fmap repoName <$> (organizationRepos' (Just oauth) name >>= handler)
+repos oauth jn =
+  fmap repoName <$> (organizationRepos' (Just oauth) jn >>= handler)
 
 
 handler :: Either Error a -> IO a
