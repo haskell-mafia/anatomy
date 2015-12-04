@@ -50,7 +50,6 @@ anatomyMain buildInfoVersion templates org owners everyone projects = do
       VersionCommand ->
         (putStrLn $ "anatomy: " <> buildInfoVersion) >> exitSuccess
 
-      -- done
       ReportCommand -> orDie renderReportError $ do
         github <- (GithubOAuth . T.unpack) <$> env "GITHUB_OAUTH"
         rs <- report github org projects
@@ -65,7 +64,6 @@ anatomyMain buildInfoVersion templates org owners everyone projects = do
             (Nothing, Just g) ->
               putStrLn $ "[KO] no anatomy metadata found for " <> repoName g
 
-      -- done
       SyncNewCommand -> orDie renderSyncError $ do
         github <- (GithubOAuth . T.unpack) <$> env "GITHUB_OAUTH"
         hookz <- HooksUrl <$> env "JENKINS_HOOKS"
@@ -85,7 +83,6 @@ anatomyMain buildInfoVersion templates org owners everyone projects = do
         forM_ n $
           liftIO . T.putStrLn . renderProjectReport
 
-      -- done
       SyncCommand -> orDie renderSyncError $ do
         github <- (GithubOAuth . T.unpack) <$> env "GITHUB_OAUTH"
         hookz <- HooksUrl <$> env "JENKINS_HOOKS"
@@ -106,7 +103,6 @@ anatomyMain buildInfoVersion templates org owners everyone projects = do
           liftIO . T.putStrLn . renderProjectReport
 
 
-      -- done
       RefreshGithubCommand -> orDie renderSyncError $ do
         github <- (GithubOAuth . T.unpack) <$> env "GITHUB_OAUTH"
         hookz <- HooksUrl <$> env "JENKINS_HOOKS"
@@ -119,7 +115,6 @@ anatomyMain buildInfoVersion templates org owners everyone projects = do
         bimapEitherT SyncCreateError id .
           syncHooks github token room org hookz $ hookable r
 
-      -- done
       RefreshJenkinsCommand -> orDie renderBuildError $ do
         conf <- getJenkinsConfiguration
         syncBuilds conf projects
