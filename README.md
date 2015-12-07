@@ -26,12 +26,15 @@ Well you can still go through the above, but you will have to setup your github 
 Operations
 ----------
 
-### diagnose / sync
+### sync
 
 For each project check current state, has repo, builds etc... go and add what is required for sync.
-Sync currently runs automatically from master branch when pushed (via the ci server) as it has permissions to see all github repos.
-Users running sync may not have permissions to see all repos so leave it to the CI server to run.
-Sync will not touch any currently existing projects.
+
+
+### refresh github / jenkins
+
+For each project refresh github hooks and jenkins builds
+
 
 ### stats / reports
 

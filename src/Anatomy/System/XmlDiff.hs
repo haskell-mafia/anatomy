@@ -54,7 +54,7 @@ xmlDiffNode n1 n2 =
         else diff
     (NodeContent t1, NodeContent t2) ->
       -- We may want to add a trim here if the diff gets noisy
-      if t1 == t2
+      if T.strip t1 == T.strip t2
         then pure ()
         else diff
     _ ->

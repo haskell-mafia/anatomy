@@ -1,19 +1,19 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Anatomy.Ci.GitHub (
-    auth
-  , auth'
-  , hook
+    hook
   , hooks
   , files
   , repos
-  , list
+  , listRepos
+  , renderRepo
   , stats
   ) where
 
-import           Anatomy.Data (HooksUrl (..))
+import           Anatomy.Data
 
-import           Control.Concurrent.Async
+import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Either
 import           Control.Retry
 
 import qualified Data.Map as M
@@ -21,11 +21,11 @@ import           Data.String (String)
 import           Data.Time
 import           Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 
 import           Github.Data.Definitions
 import           Github.GitData.Trees as GHTree
 import           Github.PullRequests
-import           Github.Auth
 import           Github.Repos
 import           Github.Repos.Hooks
 
@@ -35,75 +35,61 @@ import           System.Exit
 import           System.FilePath ((</>))
 import           System.FilePath.Glob
 import           System.IO
-import           System.Posix.Env
-
-
-env :: String -> IO String
-env var = getEnv var >>= \t -> case t of
-  Nothing -> putStrLn ("Need to specify $" <> var) >> exitFailure
-  Just a -> pure a
-
-auth' :: IO Text
-auth' = T.pack <$> env "GITHUB_OAUTH"
-
-auth :: IO GithubAuth
-auth = (GithubOAuth . T.unpack) <$> auth'
-
-hipchat' :: IO String
-hipchat' = env "HIPCHAT_TOKEN"
-
-hiproom' :: IO String
-hiproom' = fromMaybe "eng" <$> getEnv "HIPCHAT_ROOM_GITHUB"
 
 -- | List all organization projects
-list :: GithubAuth -> String -> IO ()
-list oauth org = do
-  organizationRepos' (Just oauth) org >>= handler >>= \repos' ->
-    forM_ repos' $ \r ->
-      putStrLn . intercalate " " $ [
-          githubOwnerLogin . repoOwner $  r
-        , repoName r
-        , fromMaybe "" $ repoDescription r
-        ]
+renderRepo :: Repo -> Text
+renderRepo repo =
+  T.pack . intercalate " " $ [
+      githubOwnerLogin . repoOwner $  repo
+    , repoName repo
+    , fromMaybe "" $ repoDescription repo
+    ]
+
+listRepos :: GithubAuth -> Org -> EitherT Error IO [Repo]
+listRepos oauth org =
+  EitherT $ organizationRepos' (Just oauth) (T.unpack $ orgName org)
 
 -- | Print stats for all repositories
-stats :: GithubAuth -> String -> IO ()
+stats :: GithubAuth -> Org -> EitherT Error IO ()
 stats oauth org = do
-  now <- getCurrentTime
-  repos' <- organizationRepos' (Just oauth) org >>= handler
-  void . flip mapConcurrently repos' $ \r -> do
-      pullRequestsWith' (Just oauth) org (repoName r) "all" >>= handler >>= \prs -> do
-        let prs' = flip filter prs $ \pr ->
-              let prdate = fromGithubDate . pullRequestCreatedAt $ pr
-                  diff = diffUTCTime now prdate
-               in diff <= 60 * 60 * 24 * 7
-        putStrLn . intercalate " " $ [
-            githubOwnerLogin . repoOwner $  r
-          , repoName r
-          , show . length $ prs'
-          ]
+  rs <- listRepos oauth org
+  forM_ rs  $ \r -> do
+    t <- stat oauth org r
+    liftIO . putStrLn . T.unpack $ t
+
+stat :: GithubAuth -> Org -> Repo -> EitherT Error IO Text
+stat oauth org repo = do
+  now <- liftIO $ getCurrentTime
+  prs <- EitherT $ pullRequestsWith' (Just oauth) (T.unpack $ orgName org) (repoName repo) "all"
+  let prs' = flip filter prs $ \pr ->
+        let prdate = fromGithubDate . pullRequestCreatedAt $ pr
+            diff = diffUTCTime now prdate
+        in diff <= 60 * 60 * 24 * 7
+  pure $ T.pack . intercalate " " $ [
+      githubOwnerLogin . repoOwner $  repo
+    , repoName repo
+    , show . length $ prs'
+    ]
 
 -- | Register all hooks for all organization projects
-hooks :: HooksUrl -> GithubAuth -> String -> IO ()
-hooks url oauth org = do
-  repos' <- organizationRepos' (Just oauth) org >>= handler
-  forM_ repos' $ \r ->
-    recoverAll
-      (limitRetries 5 <> exponentialBackoff 100000 {-- 100 ms --})
-      (hook url oauth (githubOwnerLogin . repoOwner $ r) (repoName r))
+hooks :: HipchatToken -> HipchatRoom -> HooksUrl -> GithubAuth -> Org -> EitherT Error IO ()
+hooks token room url oauth org = do
+  rs <- listRepos oauth org
+  forM_ rs $ \r ->
+    retrye $ hook url token room oauth (Org . T.pack . githubOwnerLogin . repoOwner $ r) (ProjectName . T.pack $ repoName r)
 
 -- | Register all hooks for specified project
-hook :: HooksUrl -> GithubAuth -> String -> String -> IO ()
-hook url oauth name project = void $ do
-  putStrLn $ "Creating hooks for [" <> name </> project <> "]"
-  forM_ [jenkins url, hipchat] $ \h ->
-    h oauth name project >>= handler
+hook :: HooksUrl -> HipchatToken -> HipchatRoom -> GithubAuth -> Org -> ProjectName -> EitherT Error IO ()
+hook url token room oauth org p = do
+  liftIO . T.putStrLn $ "Creating hooks for [" <> orgName org <> "/" <> renderName p <> "]"
+  forM_ [jenkins url, hipchat token room] $ \h ->
+    h oauth org p
 
 -- | Register the jenkins hook
 -- |   schema: https://api.github.com/hooks
-jenkins :: HooksUrl -> GithubAuth -> String -> String -> IO (Either Error Hook)
-jenkins url oauth name project =
-  createHook oauth name project "jenkins" (M.fromList [
+jenkins :: HooksUrl -> GithubAuth -> Org -> ProjectName -> EitherT Error IO Hook
+jenkins url oauth org p =
+  EitherT $ createHook oauth (s orgName org) (s renderName p) "jenkins" (M.fromList [
        ("jenkins_hook_url", (T.unpack (hooksUrl url) </> "github-webhook/"))
      ]) (Just [
        "push"
@@ -111,20 +97,23 @@ jenkins url oauth name project =
 
 -- | Filter the list of files in a specified Github project (at the HEAD)
 -- |  NOTE: This is not optimized and will retrieve the entire git tree first
-files :: GithubAuth -> String -> String -> String -> IO [String]
-files oauth name project fileGlob = do
-  ghTree <- GHTree.nestedTree (Just oauth) name project "HEAD" >>= handler
+files :: GithubAuth -> Org -> ProjectName -> String -> IO [String]
+files oauth org p fileGlob = do
+  ghTree <- GHTree.nestedTree (Just oauth) (s orgName org) (s renderName p) "HEAD" >>= handler
   let pattern = compile fileGlob
   return . filter (match pattern) . fmap gitTreePath . treeGitTrees $ ghTree
 
+s :: (a -> Text) -> a -> String
+s f =
+  T.unpack . f
 
 -- | Register the hipchat hook
 -- |   schema: https://api.github.com/hooks
-hipchat :: GithubAuth -> String -> String -> IO (Either Error Hook)
-hipchat oauth name project =
-  hipchat' >>= \token -> hiproom' >>= \room -> createHook oauth name project "hipchat" (M.fromList [
-      ("auth_token", token)
-    , ("room", room)
+hipchat :: HipchatToken -> HipchatRoom -> GithubAuth -> Org -> ProjectName -> EitherT Error IO Hook
+hipchat token room oauth org p =
+  EitherT $ createHook oauth (s orgName org) (s renderName p) "hipchat" (M.fromList [
+      ("auth_token", s hipchatToken token)
+    , ("room", s hipchatRoom room)
 --    , ("restrict_to_branch", "")
 --    , ("color", "")
 --    , ("server", "")
@@ -159,10 +148,15 @@ hipchat oauth name project =
     ]) (Just True)
 
 repos :: GithubAuth -> String -> IO [String]
-repos oauth name =
-  fmap repoName <$> (organizationRepos' (Just oauth) name >>= handler)
+repos oauth jn =
+  fmap repoName <$> (organizationRepos' (Just oauth) jn >>= handler)
 
 
 handler :: Either Error a -> IO a
-handler (Left e) = putStrLn (show e) >> exitFailure
-handler (Right v) = return v
+handler t =
+  case t of
+    Left e ->
+      hPutStrLn stderr (T.unpack $ renderGithubError e) >>
+        exitFailure
+    Right v ->
+      pure v
