@@ -8,7 +8,7 @@ copyright:             (c) 2015 Ambiata.
 synopsis:              anatomy
 category:              System
 cabal-version:         >= 1.8
-build-type:            Custom
+build-type:            Simple
 description:           anatomy.
 
 library
@@ -47,12 +47,9 @@ library
 
   hs-source-dirs:
                        src
-                       gen
 
 
   exposed-modules:
-                       BuildInfo_ambiata_anatomy
-                       Paths_ambiata_anatomy
                        Anatomy
                        Anatomy.Ci.Jenkins
                        Anatomy.Ci.GitHub
