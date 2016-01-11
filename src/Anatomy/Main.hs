@@ -3,6 +3,7 @@
 module Anatomy.Main where
 
 import           Anatomy
+import qualified Anatomy.Ci.Jenkins as J
 
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.Either
@@ -20,6 +21,7 @@ import           P
 
 import           System.IO
 import           System.Exit
+import           System.FilePath
 import           System.Posix.Env (getEnv)
 
 import           X.Options.Applicative hiding (VersionCommand)
@@ -31,6 +33,7 @@ data Command =
   | SyncNewCommand
   | RefreshGithubCommand
   | RefreshJenkinsCommand
+  | GenerateJenkinsConfig FilePath
   deriving (Eq, Show)
 
 anatomyMain ::
@@ -119,6 +122,13 @@ anatomyMain buildInfoVersion templates org owners everyone projects = do
         conf <- getJenkinsConfiguration
         syncBuilds conf projects
 
+      GenerateJenkinsConfig f ->
+        forM_ projects $ \p ->
+          forM (builds p) $ \b ->
+            J.generateJob (genModJob p b) >>=
+              T.writeFile (f </> (T.unpack $ buildName b) </> ".xml")
+
+
 getJenkinsConfiguration :: MonadIO m => m JenkinsConfiguration
 getJenkinsConfiguration = liftIO $ do
   jenkins <- JenkinsAuth <$> env "JENKINS_AUTH"
@@ -157,6 +167,9 @@ commandP =  subparser $
   <> command' "refresh-jenkins-jobs"
               "Update all jenkins configs."
               (pure RefreshJenkinsCommand)
+  <> command' "generate-jenkins-config"
+              "Generate all jenkins build configurations into the given directory."
+              (GenerateJenkinsConfig <$> filepathP)
 
 versionP :: Parser Command
 versionP =
@@ -164,3 +177,9 @@ versionP =
        short 'v'
     <> long "version"
     <> help "Display the version for the anatomy executable."
+
+filepathP :: Parser FilePath
+filepathP = strArgument $
+     metavar "FILEPATH"
+  <> help "Absolute file path, i.e. /tmp/fred"
+  <> action "file"
