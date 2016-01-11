@@ -126,7 +126,7 @@ anatomyMain buildInfoVersion templates org owners everyone projects = do
         forM_ projects $ \p ->
           forM (builds p) $ \b ->
             J.generateJob (genModJob p b) >>=
-              T.writeFile (f </> (T.unpack $ buildName b) </> ".xml")
+              T.writeFile (f </> (T.unpack $ buildName b) <.> "xml")
 
 
 getJenkinsConfiguration :: MonadIO m => m JenkinsConfiguration
