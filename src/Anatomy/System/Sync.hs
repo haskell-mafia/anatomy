@@ -10,6 +10,7 @@ module Anatomy.System.Sync (
   , jenkinsable
   , syncReport
   , renderProjectReport
+  , genModJob
   ) where
 
 import           Anatomy.Data
