@@ -40,11 +40,10 @@ anatomyMain ::
      String -- ^ Build version
   -> (a -> Maybe GithubTemplate) -- ^ a function that takes the class of a project and decides which template to apply, if any at all...
   -> Org -- ^ GitHub organisation
-  -> Team -- ^ A team of people to add as Collaborators on the new repo.
-  -> Team -- ^ A team of everyone in your organisation
+  -> Team -- ^ Admin team who own everything.
   -> [Project a b] -- ^ List of projects
   -> IO ()
-anatomyMain buildInfoVersion templates org owners everyone projects = do
+anatomyMain buildInfoVersion templates org admins projects = do
   hSetBuffering stdout LineBuffering
   hSetBuffering stderr LineBuffering
 
@@ -78,7 +77,7 @@ anatomyMain buildInfoVersion templates org owners everyone projects = do
           report github org projects
         let n = newprojects r
         bimapEitherT SyncGithubError id $
-          syncRepositories github templates org owners everyone n
+          syncRepositories github templates org admins n
         bimapEitherT SyncCreateError id $
           syncHooks github token room org hookz n
         bimapEitherT SyncBuildError id $
@@ -96,7 +95,7 @@ anatomyMain buildInfoVersion templates org owners everyone projects = do
         r <- bimapEitherT SyncReportError id $
           report github org projects
         bimapEitherT SyncGithubError id .
-          syncRepositories github templates org owners everyone $ newprojects r
+          syncRepositories github templates org admins $ newprojects r
         -- Assume all projects
         bimapEitherT SyncCreateError id $
           syncHooks github token room org hookz projects

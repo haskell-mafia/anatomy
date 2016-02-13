@@ -43,10 +43,10 @@ import           System.Process
 --   specified by "team" argument. This is normally owners and extra
 --   teams are specified as permissions elsewhere (but that bit isn't
 --   implemented yet ...)
-syncRepositories :: GithubAuth -> (a -> Maybe GithubTemplate) -> Org -> Team -> Team -> [Project a b] -> EitherT GithubCreateError IO ()
-syncRepositories auth templateName o team everyone projects = do
+syncRepositories :: GithubAuth -> (a -> Maybe GithubTemplate) -> Org -> Team -> [Project a b] -> EitherT GithubCreateError IO ()
+syncRepositories auth templateName o admins projects = do
   forM_ projects $
-    createRepository auth templateName o team everyone
+    createRepository auth templateName o admins
 
 syncHooks :: GithubAuth -> HipchatToken -> HipchatRoom -> Org -> HooksUrl -> [Project a b] -> EitherT Error IO ()
 syncHooks auth token room o h projects =
@@ -143,8 +143,8 @@ jenkinsable rs =
       Report _ _ ->
         []
 
-createRepository :: GithubAuth -> (a -> Maybe GithubTemplate) -> Org -> Team -> Team -> Project a b -> EitherT GithubCreateError IO ()
-createRepository auth templateName o t everyone p = do
+createRepository :: GithubAuth -> (a -> Maybe GithubTemplate) -> Org -> Team -> Project a b -> EitherT GithubCreateError IO ()
+createRepository auth templateName o admins p = do
   void . bimapEitherT CreateRepoError id . EitherT $
     createOrganizationRepo auth (T.unpack . orgName $ o) (newOrgRepo . T.unpack . renderName . name $ p) {
         newOrgRepoDescription = Just . T.unpack . description $ p
@@ -152,15 +152,16 @@ createRepository auth templateName o t everyone p = do
       , newOrgRepoHasIssues = Just True
       , newOrgRepoHasWiki = Just False
       , newOrgRepoHasDownloads = Just False
-      , newOrgRepoTeamId = Just . toInteger . teamGithubId $ t
+      , newOrgRepoTeamId = Just . toInteger . teamGithubId $ admins
       , newOrgRepoAutoInit = Just False
       , newOrgRepoLicense = Nothing
       , newOrgRepoGitIgnore = Nothing
       }
   forM_ (templateName $ cls p) $
     lift . pushTemplate p
-  void . bimapEitherT AddTeamError id . EitherT $
-    GO.addTeamToRepo (Just auth) (teamGithubId everyone) (T.unpack $ orgName o) (T.unpack . renderName . name $ p)
+  forM_ (teams p) $ \team ->
+      void . bimapEitherT AddTeamError id . EitherT $
+        GO.addTeamToRepo (Just auth) (teamGithubId team) (T.unpack $ orgName o) (T.unpack . renderName . name $ p)
 
 genModJob :: Project a b -> Build -> J.ModJob
 genModJob p b =
