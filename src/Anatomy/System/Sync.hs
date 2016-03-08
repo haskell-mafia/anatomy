@@ -161,7 +161,12 @@ createRepository auth templateName o admins p = do
     lift . pushTemplate p
   forM_ (teams p) $ \team ->
       void . bimapEitherT AddTeamError id . EitherT $
-        GO.addTeamToRepo (Just auth) (teamGithubId team) (T.unpack $ orgName o) (T.unpack . renderName . name $ p)
+        GO.addTeamToRepo
+          auth
+          (teamGithubId team)
+          (T.unpack $ orgName o)
+          (T.unpack . renderName . name $ p)
+          (teamPermission team)
 
 genModJob :: Project a b -> Build -> J.ModJob
 genModJob p b =
