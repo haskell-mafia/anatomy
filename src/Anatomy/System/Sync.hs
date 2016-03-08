@@ -25,10 +25,12 @@ import qualified Anatomy.Ci.GitHub as G
 import qualified Anatomy.Ci.Jenkins as J
 import           Anatomy.System.XmlDiff
 
+import           Data.String (String)
 import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Github.Repos
+import qualified Github.Repos.Collaborators as R
 import qualified Github.Organizations as GO
 
 import           P
@@ -145,8 +147,10 @@ jenkinsable rs =
 
 createRepository :: GithubAuth -> (a -> Maybe GithubTemplate) -> Org -> Team -> Project a b -> EitherT GithubCreateError IO ()
 createRepository auth templateName o admins p = do
+  let org = T.unpack . orgName $ o
+      repo = T.unpack . renderName . name $ p
   void . bimapEitherT CreateRepoError id . EitherT $
-    createOrganizationRepo auth (T.unpack . orgName $ o) (newOrgRepo . T.unpack . renderName . name $ p) {
+    createOrganizationRepo auth org (newOrgRepo org) {
         newOrgRepoDescription = Just . T.unpack . description $ p
       , newOrgRepoPrivate = Just True
       , newOrgRepoHasIssues = Just True
@@ -160,20 +164,22 @@ createRepository auth templateName o admins p = do
   forM_ (templateName $ cls p) $
     lift . pushTemplate p
   void . bimapEitherT AddTeamError id . EitherT $
-    GO.addTeamToRepo
-      auth
-      (teamGithubId admins)
-      (T.unpack $ orgName o)
-      (T.unpack . renderName . name $ p)
-      (Just PermissionAdmin)
+    GO.addTeamToRepo auth (teamGithubId admins) org repo (Just PermissionAdmin)
   forM_ (teams p) $ \team ->
       void . bimapEitherT AddTeamError id . EitherT $
-        GO.addTeamToRepo
-          auth
-          (teamGithubId team)
-          (T.unpack $ orgName o)
-          (T.unpack . renderName . name $ p)
-          (teamPermission team)
+        GO.addTeamToRepo auth (teamGithubId team) org repo (teamPermission team)
+  s <- bimapEitherT CollaboratorError id . EitherT $
+    R.collaboratorsOn org repo
+  bimapEitherT CollaboratorError id . forM_ s $ \c ->
+    EitherT $ R.removeCollaborator org repo $ collaboratorLogin c
+
+collaboratorLogin :: GithubOwner -> String
+collaboratorLogin g =
+  case g of
+    GithubUser _ l _ _ _ ->
+      l
+    GithubOrganization _ l _ _ ->
+      l
 
 genModJob :: Project a b -> Build -> J.ModJob
 genModJob p b =
