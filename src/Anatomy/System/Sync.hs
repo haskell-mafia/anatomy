@@ -148,7 +148,7 @@ createRepository auth templateName o admins p = do
   let org = T.unpack . orgName $ o
       repo = T.unpack . renderName . name $ p
   void . bimapEitherT CreateRepoError id . EitherT $
-    createOrganizationRepo auth org (newOrgRepo org) {
+    createOrganizationRepo auth org (newOrgRepo repo) {
         newOrgRepoDescription = Just . T.unpack . description $ p
       , newOrgRepoPrivate = Just True
       , newOrgRepoHasIssues = Just True
