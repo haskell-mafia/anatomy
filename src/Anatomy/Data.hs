@@ -5,6 +5,7 @@ module Anatomy.Data (
   , GithubTemplate (..)
   , GithubAuth (..)
   , Team (..)
+  , T.Permission (..)
   , Project (..)
   , ProjectName (..)
   , Status (..)
@@ -46,6 +47,7 @@ import qualified Data.Text as T
 
 import           Github.Auth
 import           Github.Data
+import qualified Github.Data.Teams as T
 
 import           P
 
@@ -115,6 +117,7 @@ data Team =
   Team {
       teamName :: Text
     , teamGithubId :: Int
+    , teamPermission :: Maybe Permission
     } deriving (Eq, Show)
 
 data Project a b =
