@@ -152,13 +152,20 @@ createRepository auth templateName o admins p = do
       , newOrgRepoHasIssues = Just True
       , newOrgRepoHasWiki = Just False
       , newOrgRepoHasDownloads = Just False
-      , newOrgRepoTeamId = Just . toInteger . teamGithubId $ admins
+      , newOrgRepoTeamId = Nothing
       , newOrgRepoAutoInit = Just False
       , newOrgRepoLicense = Nothing
       , newOrgRepoGitIgnore = Nothing
       }
   forM_ (templateName $ cls p) $
     lift . pushTemplate p
+  void . bimapEitherT AddTeamError id . EitherT $
+    GO.addTeamToRepo
+      auth
+      (teamGithubId admins)
+      (T.unpack $ orgName o)
+      (T.unpack . renderName . name $ p)
+      (Just PermissionAdmin)
   forM_ (teams p) $ \team ->
       void . bimapEitherT AddTeamError id . EitherT $
         GO.addTeamToRepo
