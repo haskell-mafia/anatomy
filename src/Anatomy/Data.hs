@@ -201,7 +201,6 @@ data ReportError =
 
 data GithubCreateError =
     CreateRepoError Error
-  | CollaboratorError Error
   | AddTeamError SomeException
   deriving Show
 
@@ -249,8 +248,6 @@ renderGithubCreateError err =
   case err of
     CreateRepoError e ->
       "Error creating github repository: " <> renderGithubError e
-    CollaboratorError e ->
-      "Error removing collaborators: " <> renderGithubError e
     AddTeamError e ->
       "Error adding team to repository: " <> T.pack (show e)
 

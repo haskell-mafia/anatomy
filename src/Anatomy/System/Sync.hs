@@ -25,12 +25,10 @@ import qualified Anatomy.Ci.GitHub as G
 import qualified Anatomy.Ci.Jenkins as J
 import           Anatomy.System.XmlDiff
 
-import           Data.String (String)
 import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Github.Repos
-import qualified Github.Repos.Collaborators as R
 import qualified Github.Organizations as GO
 
 import           P
@@ -168,18 +166,6 @@ createRepository auth templateName o admins p = do
   forM_ (teams p) $ \team ->
       void . bimapEitherT AddTeamError id . EitherT $
         GO.addTeamToRepo auth (teamGithubId team) org repo (teamPermission team)
-  s <- bimapEitherT CollaboratorError id . EitherT $
-    R.collaboratorsOn org repo
-  bimapEitherT CollaboratorError id . forM_ s $ \c ->
-    EitherT $ R.removeCollaborator org repo $ collaboratorLogin c
-
-collaboratorLogin :: GithubOwner -> String
-collaboratorLogin g =
-  case g of
-    GithubUser _ l _ _ _ ->
-      l
-    GithubOrganization _ l _ _ ->
-      l
 
 genModJob :: Project a b -> Build -> J.ModJob
 genModJob p b =
