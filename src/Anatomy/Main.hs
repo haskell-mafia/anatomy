@@ -34,6 +34,7 @@ data Command =
   | RefreshGithubCommand
   | RefreshJenkinsCommand
   | GenerateJenkinsConfig FilePath
+  | RepositoryList FilePath
   deriving (Eq, Show)
 
 anatomyMain ::
@@ -104,7 +105,6 @@ anatomyMain buildInfoVersion templates org admins projects = do
         forM_ (newprojects r) $
           liftIO . T.putStrLn . renderProjectReport
 
-
       RefreshGithubCommand -> orDie renderSyncError $ do
         github <- (GithubOAuth . T.unpack) <$> env "GITHUB_OAUTH"
         hookz <- HooksUrl <$> env "JENKINS_HOOKS"
@@ -127,6 +127,17 @@ anatomyMain buildInfoVersion templates org admins projects = do
             J.generateJob (genModJob p b) >>=
               T.writeFile (f </> (T.unpack $ buildName b) <.> "xml")
 
+      RepositoryList f -> do
+        T.writeFile f . T.unlines .
+          flip fmap projects $ \p ->
+            let
+              n = renderName (name p)
+            in mconcat [
+                n
+              , "="
+              , "git@github.com:ambiata/"
+              , n
+              ]
 
 getJenkinsConfiguration :: MonadIO m => m JenkinsConfiguration
 getJenkinsConfiguration = liftIO $ do
@@ -169,6 +180,9 @@ commandP =  subparser $
   <> command' "generate-jenkins-config"
               "Generate all jenkins build configurations into the given directory."
               (GenerateJenkinsConfig <$> filepathP)
+  <> command' "repository-list"
+              "Generate a list of project names and links to clone there respective git repositories."
+              (RepositoryList <$> filepathP)
 
 versionP :: Parser Command
 versionP =
