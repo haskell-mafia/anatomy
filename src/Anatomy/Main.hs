@@ -135,7 +135,9 @@ anatomyMain buildInfoVersion templates org admins projects = do
             in mconcat [
                 n
               , "="
-              , "git@github.com:ambiata/"
+              , "git@github.com:"
+              , orgName org
+              , "/"
               , n
               ]
 
