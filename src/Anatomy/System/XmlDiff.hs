@@ -48,9 +48,13 @@ xmlDiffNode n1 n2 =
     (NodeElement e1, NodeElement e2) ->
       if elementName e1 == elementName e2
         then
-          first (\(XmlDiff e n) -> XmlDiff (e1 : e) n)
-            . traverse_ (uncurry xmlDiffNode)
-            $ L.zip (elementNodes e1) (elementNodes e2)
+          first (\(XmlDiff e n) -> XmlDiff (e1 : e) n) $
+            -- If we need better error reporting or edge case handling pull in `these`
+            if (length $ elementNodes e1) /= (length $ elementNodes e2)
+              then
+                diff
+              else
+                traverse_ (uncurry xmlDiffNode) $ L.zip (elementNodes e1) (elementNodes e2)
         else diff
     (NodeContent t1, NodeContent t2) ->
       -- We may want to add a trim here if the diff gets noisy
