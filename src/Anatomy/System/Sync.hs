@@ -5,12 +5,14 @@ module Anatomy.System.Sync (
     syncRepositories
   , syncHooks
   , syncBuilds
+  , githubprojects
   , newprojects
   , hookable
   , jenkinsable
   , syncReport
   , renderProjectReport
   , genModJob
+  , updateRepository
   ) where
 
 import           Anatomy.Data
@@ -45,8 +47,9 @@ import           System.Process
 --   implemented yet ...)
 syncRepositories :: GithubAuth -> (a -> Maybe GithubTemplate) -> Org -> Team -> [Project a b] -> EitherT GithubCreateError IO ()
 syncRepositories auth templateName o admins projects = do
-  forM_ projects $
-    createRepository auth templateName o admins
+  forM_ projects $ \p -> do
+    createRepository auth templateName o p
+    updateRepository auth o admins p
 
 syncHooks :: GithubAuth -> HipchatToken -> HipchatRoom -> Org -> HooksUrl -> [Project a b] -> EitherT Error IO ()
 syncHooks auth token room o h projects =
@@ -109,6 +112,18 @@ renderProjectReport p =
     , renderName . name $ p
     ]
 
+githubprojects :: [Report a b] -> [Project a b]
+githubprojects rs =
+  rs >>= \r -> case r of
+    Report Nothing Nothing ->
+      []
+    Report (Just p) (Just _) ->
+      [p]
+    Report Nothing (Just _) ->
+      []
+    Report (Just _) Nothing ->
+      []
+
 newprojects :: [Report a b] -> [Project a b]
 newprojects rs =
   rs >>= \r -> case r of
@@ -143,8 +158,8 @@ jenkinsable rs =
       Report _ _ ->
         []
 
-createRepository :: GithubAuth -> (a -> Maybe GithubTemplate) -> Org -> Team -> Project a b -> EitherT GithubCreateError IO ()
-createRepository auth templateName o admins p = do
+createRepository :: GithubAuth -> (a -> Maybe GithubTemplate) -> Org -> Project a b -> EitherT GithubCreateError IO ()
+createRepository auth templateName o p = do
   let org = T.unpack . orgName $ o
       repo = T.unpack . renderName . name $ p
   void . bimapEitherT CreateRepoError id . EitherT $
@@ -161,6 +176,12 @@ createRepository auth templateName o admins p = do
       }
   forM_ (templateName $ cls p) $
     lift . pushTemplate p
+
+-- Permissions only for the time being
+updateRepository :: GithubAuth -> Org -> Team -> Project a b -> EitherT GithubCreateError IO ()
+updateRepository auth o admins p = do
+  let org = T.unpack . orgName $ o
+      repo = T.unpack . renderName . name $ p
   void . bimapEitherT AddTeamError id . EitherT $
     GO.addTeamToRepo auth (teamGithubId admins) org repo (Just PermissionAdmin)
   forM_ (teams p) $ \team ->
