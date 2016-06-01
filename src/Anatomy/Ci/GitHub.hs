@@ -99,7 +99,7 @@ jenkins url oauth org p =
 -- |   schema: https://developer.github.com/v3/repos/hooks/#create-a-hook
 webhook :: HooksUrl -> GithubAuth -> Org -> ProjectName -> EitherT Error IO Hook
 webhook url oauth org p =
-  EitherT $ createHook oauth (s orgName org) (s renderName p) "webhook" (M.fromList [
+  EitherT $ createHook oauth (s orgName org) (s renderName p) "web" (M.fromList [
        ("url", (T.unpack (hooksUrl url) </> "github"))
      , ("content_type", "json")
      ]) (Just [
