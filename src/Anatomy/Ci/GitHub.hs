@@ -87,24 +87,26 @@ hook url token room oauth org p = do
 
 -- | Register the jenkins hook
 -- |   schema: https://api.github.com/hooks
-jenkins :: HooksUrl -> GithubAuth -> Org -> ProjectName -> EitherT Error IO Hook
-jenkins url oauth org p =
-  EitherT $ createHook oauth (s orgName org) (s renderName p) "jenkins" (M.fromList [
+jenkins :: HooksUrl -> GithubAuth -> Org -> ProjectName -> EitherT Error IO ()
+jenkins url oauth org p = EitherT $ do
+  _ <- createHook oauth (s orgName org) (s renderName p) "jenkins" (M.fromList [
        ("jenkins_hook_url", (T.unpack (hooksUrl url) </> "github-webhook/"))
      ]) (Just [
        "push"
      ]) (Just True)
+  pure $ Right ()
 
 -- | Register the generic web hook
 -- |   schema: https://developer.github.com/v3/repos/hooks/#create-a-hook
-webhook :: HooksUrl -> GithubAuth -> Org -> ProjectName -> EitherT Error IO Hook
-webhook url oauth org p =
-  EitherT $ createHook oauth (s orgName org) (s renderName p) "web" (M.fromList [
+webhook :: HooksUrl -> GithubAuth -> Org -> ProjectName -> EitherT Error IO ()
+webhook url oauth org p = EitherT $ do
+  _ <- createHook oauth (s orgName org) (s renderName p) "web" (M.fromList [
        ("url", (T.unpack (hooksUrl url) </> "github"))
      , ("content_type", "json")
      ]) (Just [
        "*"
      ]) (Just True)
+  pure $ Right ()
 
 -- | Filter the list of files in a specified Github project (at the HEAD)
 -- |  NOTE: This is not optimized and will retrieve the entire git tree first
@@ -120,9 +122,9 @@ s f =
 
 -- | Register the hipchat hook
 -- |   schema: https://api.github.com/hooks
-hipchat :: HipchatToken -> HipchatRoom -> GithubAuth -> Org -> ProjectName -> EitherT Error IO Hook
-hipchat token room oauth org p =
-  EitherT $ createHook oauth (s orgName org) (s renderName p) "hipchat" (M.fromList [
+hipchat :: HipchatToken -> HipchatRoom -> GithubAuth -> Org -> ProjectName -> EitherT Error IO ()
+hipchat token room oauth org p = EitherT $ do
+  _ <- createHook oauth (s orgName org) (s renderName p) "hipchat" (M.fromList [
       ("auth_token", s hipchatToken token)
     , ("room", s hipchatRoom room)
 --    , ("restrict_to_branch", "")
@@ -157,6 +159,7 @@ hipchat token room oauth org p =
     , "team_add"
     , "watch"
     ]) (Just True)
+  pure $ Right ()
 
 repos :: GithubAuth -> String -> IO [String]
 repos oauth jn =
