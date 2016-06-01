@@ -34,6 +34,7 @@ data Command =
   | RefreshGithubCommand
   | RefreshJenkinsCommand
   | GenerateJenkinsConfig FilePath
+  | UpdateRepositories
   | RepositoryList FilePath
   deriving (Eq, Show)
 
@@ -100,6 +101,8 @@ anatomyMain buildInfoVersion templates org admins projects = do
         -- Assume all projects
         bimapEitherT SyncCreateError id $
           syncHooks github token room org hookz projects
+        bimapEitherT SyncGithubError id $
+          forM_ (githubprojects r) $ updateRepository github org admins
         bimapEitherT SyncBuildError id $
           syncBuilds conf projects
         forM_ (newprojects r) $
@@ -126,6 +129,13 @@ anatomyMain buildInfoVersion templates org admins projects = do
           forM (builds p) $ \b ->
             J.generateJob (genModJob p b) >>=
               T.writeFile (f </> (T.unpack $ buildName b) <.> "xml")
+
+      UpdateRepositories -> orDie renderSyncError $ do
+        github <- (GithubOAuth . T.unpack) <$> env "GITHUB_OAUTH"
+        r <- bimapEitherT SyncReportError id $
+          report github org projects
+        bimapEitherT SyncGithubError id $
+          forM_ (githubprojects r) $ updateRepository github org admins
 
       RepositoryList f -> do
         T.writeFile f . T.unlines .
@@ -182,6 +192,9 @@ commandP =  subparser $
   <> command' "generate-jenkins-config"
               "Generate all jenkins build configurations into the given directory."
               (GenerateJenkinsConfig <$> filepathP)
+  <> command' "update-repositories"
+              "Update permissions for all github repositories."
+              (pure UpdateRepositories)
   <> command' "repository-list"
               "Generate a list of project names and links to clone there respective git repositories."
               (RepositoryList <$> filepathP)
