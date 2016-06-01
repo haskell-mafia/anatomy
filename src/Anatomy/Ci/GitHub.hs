@@ -82,7 +82,7 @@ hooks token room url oauth org = do
 hook :: HooksUrl -> HipchatToken -> HipchatRoom -> GithubAuth -> Org -> ProjectName -> EitherT Error IO ()
 hook url token room oauth org p = do
   liftIO . T.putStrLn $ "Creating hooks for [" <> orgName org <> "/" <> renderName p <> "]"
-  forM_ [jenkins url, hipchat token room] $ \h ->
+  forM_ [jenkins url, hipchat token room, webhook url] $ \h ->
     h oauth org p
 
 -- | Register the jenkins hook
@@ -93,6 +93,17 @@ jenkins url oauth org p =
        ("jenkins_hook_url", (T.unpack (hooksUrl url) </> "github-webhook/"))
      ]) (Just [
        "push"
+     ]) (Just True)
+
+-- | Register the generic web hook
+-- |   schema: https://developer.github.com/v3/repos/hooks/#create-a-hook
+webhook :: HooksUrl -> GithubAuth -> Org -> ProjectName -> EitherT Error IO Hook
+webhook url oauth org p =
+  EitherT $ createHook oauth (s orgName org) (s renderName p) "webhook" (M.fromList [
+       ("url", (T.unpack (hooksUrl url) </> "github"))
+     , ("content_type", "json")
+     ]) (Just [
+       "*"
      ]) (Just True)
 
 -- | Filter the list of files in a specified Github project (at the HEAD)
