@@ -6,3 +6,9 @@
 
 [build.branches]
   git = "refs/heads/topic/*"
+
+[build.dist-7-10]
+  git = "refs/heads/master"
+
+[build.branches-7-10]
+  git = "refs/heads/topic/*"
