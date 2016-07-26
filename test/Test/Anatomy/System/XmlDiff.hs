@@ -6,8 +6,6 @@ module Test.Anatomy.System.XmlDiff where
 
 import           Anatomy.System.XmlDiff
 
-import           Data.Text (Text)
-
 import           P
 
 import           System.IO

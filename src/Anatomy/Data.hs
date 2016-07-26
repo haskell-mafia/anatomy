@@ -42,7 +42,6 @@ module Anatomy.Data (
 import           Control.Exception.Base (SomeException)
 import           Control.Retry
 
-import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Github.Auth
