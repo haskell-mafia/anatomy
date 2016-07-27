@@ -19,7 +19,6 @@ import           Control.Retry
 import qualified Data.Map as M
 import           Data.String (String)
 import           Data.Time
-import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 

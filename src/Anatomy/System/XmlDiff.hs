@@ -11,7 +11,6 @@ module Anatomy.System.XmlDiff (
 import           Anatomy.Data
 
 import qualified Data.List as L
-import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 

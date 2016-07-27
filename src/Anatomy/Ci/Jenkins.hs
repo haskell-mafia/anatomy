@@ -21,7 +21,6 @@ import qualified Data.ByteString as B hiding (unpack, pack)
 import qualified Data.ByteString.Lazy as BL hiding (unpack, pack)
 import qualified Data.Aeson as A
 import qualified Data.HashMap.Strict as HM
-import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Encoding as T
@@ -152,8 +151,9 @@ isJobRunning conf n = do
 
 https :: Text -> JenkinsUser -> JenkinsAuth -> (Request -> Request) -> IO (Response BL.ByteString)
 https url user auth xform =
-  parseUrl (T.unpack url) >>= \req ->
-    withManager (mkManagerSettings (TLSSettingsSimple True False True) Nothing) . httpLbs $
+  parseUrlThrow (T.unpack url) >>= \req -> do
+    m <- newManager (mkManagerSettings (TLSSettingsSimple True False True) Nothing)
+    flip httpLbs m $
       (applyBasicAuth (T.encodeUtf8 . renderUser $ user) (T.encodeUtf8 . jenkinsAuth $ auth) $ xform (req {
           checkStatus = const . const . const $ Nothing
         }))

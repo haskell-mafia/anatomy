@@ -27,7 +27,6 @@ import qualified Anatomy.Ci.GitHub as G
 import qualified Anatomy.Ci.Jenkins as J
 import           Anatomy.System.XmlDiff
 
-import           Data.Text (Text)
 import qualified Data.Text as T
 
 import           Github.Repos
