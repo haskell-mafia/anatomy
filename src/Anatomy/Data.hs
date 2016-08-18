@@ -29,12 +29,19 @@ module Anatomy.Data (
   , GithubCreateError (..)
   , HipchatToken (..)
   , HipchatRoom (..)
+  , G.Protection (..)
+  , G.RequiredStatusChecks (..)
+  , G.EnforcementLevel (..)
+  , G.PushRestrictions (..)
+  , G.User (..)
+  , G.TeamName (..)
   , renderReportError
   , renderSyncError
   , renderGithubError
   , renderBuildError
   , renderXmlDiffError
   , project
+  , projectProtection
   , retry
   , retrye
   ) where
@@ -46,6 +53,7 @@ import qualified Data.Text as T
 
 import           Github.Auth
 import           Github.Data
+import qualified Github.Data.Definitions as G
 import qualified Github.Data.Teams as T
 
 import           P
@@ -128,6 +136,7 @@ data Project a b =
     , category :: Maybe b
     , teams :: [Team]
     , builds :: [Build]
+    , protection :: Protection
     } deriving (Eq, Show)
 
 newtype ProjectName =
@@ -162,7 +171,11 @@ newtype BuildTemplate =
 
 project :: Text -> Text -> Status -> a -> [BuildSkeleton] -> Project a b
 project n d s c b =
-  Project (ProjectName n) d s c Nothing [] ((\(BuildSkeleton w r t) -> Build (w n) r t) <$> b)
+  Project (ProjectName n) d s c Nothing [] ((\(BuildSkeleton w r t) -> Build (w n) r t) <$> b) (Protection Nothing Nothing)
+
+projectProtection :: Text -> Text -> Status -> a -> [BuildSkeleton] -> Protection -> Project a b
+projectProtection n d s c b p =
+  Project (ProjectName n) d s c Nothing [] ((\(BuildSkeleton w r t) -> Build (w n) r t) <$> b) p
 
 data Status =
     Idea             -- A readme.

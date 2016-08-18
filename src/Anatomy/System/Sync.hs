@@ -183,9 +183,9 @@ updateRepository auth o admins p = do
       repo = T.unpack . renderName . name $ p
   void . bimapEitherT AddTeamError id . EitherT $
     GO.addTeamToRepo auth (teamGithubId admins) org repo (Just PermissionAdmin)
-  forM_ (teams p) $ \team ->
+  forM_ (teams p) $ \tm ->
       void . bimapEitherT AddTeamError id . EitherT $
-        GO.addTeamToRepo auth (teamGithubId team) org repo (teamPermission team)
+        GO.addTeamToRepo auth (teamGithubId tm) org repo (teamPermission tm)
 
 genModJob :: Project a b -> Build -> J.ModJob
 genModJob p b =
