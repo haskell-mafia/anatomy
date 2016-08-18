@@ -150,11 +150,11 @@ isJobRunning conf n = do
       Left $ "Invalid status " <> (T.pack . show) i
 
 https :: Text -> JenkinsUser -> JenkinsAuth -> (Request -> Request) -> IO (Response BL.ByteString)
-https url user auth xform =
+https url usr auth xform =
   parseUrlThrow (T.unpack url) >>= \req -> do
     m <- newManager (mkManagerSettings (TLSSettingsSimple True False True) Nothing)
     flip httpLbs m $
-      (applyBasicAuth (T.encodeUtf8 . renderUser $ user) (T.encodeUtf8 . jenkinsAuth $ auth) $ xform (req {
+      (applyBasicAuth (T.encodeUtf8 . renderUser $ usr) (T.encodeUtf8 . jenkinsAuth $ auth) $ xform (req {
           checkStatus = const . const . const $ Nothing
         }))
 

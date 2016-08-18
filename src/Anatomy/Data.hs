@@ -29,6 +29,7 @@ module Anatomy.Data (
   , GithubCreateError (..)
   , HipchatToken (..)
   , HipchatRoom (..)
+  , Branch (..)
   , G.Protection (..)
   , G.RequiredStatusChecks (..)
   , G.EnforcementLevel (..)
@@ -41,7 +42,6 @@ module Anatomy.Data (
   , renderBuildError
   , renderXmlDiffError
   , project
-  , projectProtection
   , retry
   , retrye
   ) where
@@ -52,7 +52,7 @@ import           Control.Retry
 import qualified Data.Text as T
 
 import           Github.Auth
-import           Github.Data
+import           Github.Data hiding (Branch)
 import qualified Github.Data.Definitions as G
 import qualified Github.Data.Teams as T
 
@@ -136,12 +136,17 @@ data Project a b =
     , category :: Maybe b
     , teams :: [Team]
     , builds :: [Build]
-    , protection :: Protection
+    , branchProtection :: [(Branch, Protection)]
     } deriving (Eq, Show)
 
 newtype ProjectName =
   ProjectName {
       renderName :: Text
+    } deriving (Eq, Show)
+
+newtype Branch =
+  Branch {
+      renderBranch :: Text
     } deriving (Eq, Show)
 
 data Build =
@@ -169,13 +174,9 @@ newtype BuildTemplate =
       buildTemplate :: Text
     } deriving (Eq, Show)
 
-project :: Text -> Text -> Status -> a -> [BuildSkeleton] -> Project a b
-project n d s c b =
-  Project (ProjectName n) d s c Nothing [] ((\(BuildSkeleton w r t) -> Build (w n) r t) <$> b) (Protection Nothing Nothing)
-
-projectProtection :: Text -> Text -> Status -> a -> [BuildSkeleton] -> Protection -> Project a b
-projectProtection n d s c b p =
-  Project (ProjectName n) d s c Nothing [] ((\(BuildSkeleton w r t) -> Build (w n) r t) <$> b) p
+project :: Text -> Text -> Status -> a -> [BuildSkeleton] -> [(Branch, Protection)] -> Project a b
+project n d s c b pro =
+  Project (ProjectName n) d s c Nothing [] ((\(BuildSkeleton w r t) -> Build (w n) r t) <$> b) pro
 
 data Status =
     Idea             -- A readme.
@@ -214,14 +215,15 @@ data ReportError =
 data GithubCreateError =
     CreateRepoError Error
   | AddTeamError SomeException
-  deriving Show
+  | AddProtectionError SomeException
+    deriving Show
 
 data SyncError =
     SyncReportError ReportError
   | SyncCreateError Error
   | SyncGithubError GithubCreateError
   | SyncBuildError SyncBuildError
-  deriving Show
+    deriving Show
 
 data SyncBuildError =
   XmlError Build XmlDiffError
@@ -231,7 +233,7 @@ data SyncMode =
     Diagnose
   | Sync
   | SyncUpdate
-  deriving (Eq, Show)
+    deriving (Eq, Show)
 
 data XmlDiffError =
   XmlParseError Text
@@ -262,6 +264,8 @@ renderGithubCreateError err =
       "Error creating github repository: " <> renderGithubError e
     AddTeamError e ->
       "Error adding team to repository: " <> T.pack (show e)
+    AddProtectionError e ->
+      "Error branch protection to repository: " <> T.pack (show e)
 
 renderGithubError :: Error -> Text
 renderGithubError err =
