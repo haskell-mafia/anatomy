@@ -153,9 +153,9 @@ anatomyMain buildInfoVersion templates org admins projects = do
 getJenkinsConfiguration :: MonadIO m => m JenkinsConfiguration
 getJenkinsConfiguration = liftIO $ do
   jenkins <- JenkinsAuth <$> env "JENKINS_AUTH"
-  user <- JenkinsUser <$> env "JENKINS_USER"
+  usr <- JenkinsUser <$> env "JENKINS_USER"
   host <- JenkinsUrl <$> env "JENKINS_HOST"
-  pure $ JenkinsConfiguration user jenkins host
+  pure $ JenkinsConfiguration usr jenkins host
 
 env :: MonadIO m => Text -> m Text
 env var =
