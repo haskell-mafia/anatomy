@@ -30,7 +30,6 @@ import           Anatomy.System.XmlDiff
 import qualified Data.Text as T
 
 import           Github.Repos
-import qualified Github.Repos.Branches as GB
 import qualified Github.Organizations as GO
 
 import           P
@@ -187,9 +186,6 @@ updateRepository auth o admins p = do
   forM_ (teams p) $ \tm ->
     void . bimapEitherT AddTeamError id . EitherT $
       GO.addTeamToRepo auth (teamGithubId tm) org repo (teamPermission tm)
-  forM_ (branchProtection p) $ \(b, pro) ->
-    bimapEitherT AddProtectionError id . EitherT $
-      GB.protect auth org repo (T.unpack $ renderBranch b) (Just pro)
 
 genModJob :: Project a b -> Build -> J.ModJob
 genModJob p b =
