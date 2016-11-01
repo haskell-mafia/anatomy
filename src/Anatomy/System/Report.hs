@@ -20,7 +20,7 @@ import           P
 import           System.IO
 
 -- | Produce a report for all projects for specified organization.
-report :: GithubAuth -> Org -> [Project a b] -> EitherT ReportError IO [Report a b]
+report :: GithubAuth -> Org -> [Project a b c] -> EitherT ReportError IO [Report a b c]
 report auth o ps =
   scrape auth o >>= \gs ->
     forM ps (reportOn gs) >>= \rs ->
@@ -32,13 +32,13 @@ scrape a o =
   bimapEitherT GitHubError id . EitherT  $ organizationRepos' (Just a) (T.unpack . orgName $ o)
 
 -- | Find all the scraps, i.e. repositories we don't have anatomy metadata for.
-scraps :: [Repo] -> [Project a b] -> [Report a b]
+scraps :: [Repo] -> [Project a b c] -> [Report a b c]
 scraps gs ps =
   let ns = (renderName . name) <$> ps
   in Report Nothing . Just <$> L.filter (not . flip L.elem ns . T.pack . repoName) gs
 
 -- | Report on a particular project, given the current set of github repositories.
-reportOn :: [Repo] -> Project a b -> EitherT ReportError IO (Report a b)
+reportOn :: [Repo] -> Project a b c -> EitherT ReportError IO (Report a b c)
 reportOn rs p =
   pure $
     Report {

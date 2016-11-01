@@ -42,7 +42,7 @@ anatomyMain ::
   -> (a -> Maybe GithubTemplate) -- ^ a function that takes the class of a project and decides which template to apply, if any at all...
   -> Org -- ^ GitHub organisation
   -> Team -- ^ Admin team who own everything.
-  -> [Project a b] -- ^ List of projects
+  -> [Project a b c] -- ^ List of projects
   -> IO ()
 anatomyMain buildInfoVersion templates org admins projects = do
   hSetBuffering stdout LineBuffering

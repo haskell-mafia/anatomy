@@ -45,18 +45,18 @@ import           System.Process
 --   specified by "team" argument. This is normally owners and extra
 --   teams are specified as permissions elsewhere (but that bit isn't
 --   implemented yet ...)
-syncRepositories :: GithubAuth -> (a -> Maybe GithubTemplate) -> Org -> Team -> [Project a b] -> EitherT GithubCreateError IO ()
+syncRepositories :: GithubAuth -> (a -> Maybe GithubTemplate) -> Org -> Team -> [Project a b c] -> EitherT GithubCreateError IO ()
 syncRepositories auth templateName o admins projects = do
   forM_ projects $ \p -> do
     createRepository auth templateName o p
     updateRepository auth o admins p
 
-syncHooks :: GithubAuth -> HipchatToken -> HipchatRoom -> Org -> HooksUrl -> [Project a b] -> EitherT Error IO ()
+syncHooks :: GithubAuth -> HipchatToken -> HipchatRoom -> Org -> HooksUrl -> [Project a b c] -> EitherT Error IO ()
 syncHooks auth token room o h projects =
   forM_ projects $
     G.hook h token room auth o . name
 
-syncBuilds :: JenkinsConfiguration -> [Project a b] -> EitherT SyncBuildError IO ()
+syncBuilds :: JenkinsConfiguration -> [Project a b c] -> EitherT SyncBuildError IO ()
 syncBuilds conf projects =
   forM_ projects $ \p -> do
     -- Don't spam jenkins, its a little fragile.
@@ -65,7 +65,7 @@ syncBuilds conf projects =
     forM (builds p) $
       syncBuild conf p
 
-syncBuild :: JenkinsConfiguration -> Project a b -> Build -> EitherT SyncBuildError IO ()
+syncBuild :: JenkinsConfiguration -> Project a b c -> Build -> EitherT SyncBuildError IO ()
 syncBuild conf p b = do
   let mj = genModJob p b
   let createOrUpdate = retry $ J.createOrUpdateJob conf mj
@@ -97,7 +97,7 @@ getJob conf b = do
   pure $ rightToMaybe e
 
 -- | Log sync reporting for the specified projects.
-syncReport :: [Project a b] -> IO ()
+syncReport :: [Project a b c] -> IO ()
 syncReport ps =
   forM_ ps $ \p ->
     putStrLn . T.unpack . T.intercalate " " $ [
@@ -105,14 +105,14 @@ syncReport ps =
       , renderName . name $ p
       ]
 
-renderProjectReport :: Project a b -> Text
+renderProjectReport :: Project a b c -> Text
 renderProjectReport p =
   T.intercalate " " $ [
       "new github project:"
     , renderName . name $ p
     ]
 
-githubprojects :: [Report a b] -> [Project a b]
+githubprojects :: [Report a b c] -> [Project a b c]
 githubprojects rs =
   rs >>= \r -> case r of
     Report Nothing Nothing ->
@@ -124,7 +124,7 @@ githubprojects rs =
     Report (Just _) Nothing ->
       []
 
-newprojects :: [Report a b] -> [Project a b]
+newprojects :: [Report a b c] -> [Project a b c]
 newprojects rs =
   rs >>= \r -> case r of
     Report Nothing Nothing ->
@@ -136,7 +136,7 @@ newprojects rs =
     Report (Just p) Nothing ->
       [p]
 
-hookable :: [Report a b] -> [Project a b]
+hookable :: [Report a b c] -> [Project a b c]
 hookable rs =
   rs >>= \r ->
     case r of
@@ -149,7 +149,7 @@ hookable rs =
       Report (Just p) (Just _) ->
         [p]
 
-jenkinsable :: [Report a b] -> [Project a b]
+jenkinsable :: [Report a b c] -> [Project a b c]
 jenkinsable rs =
   rs >>= \r ->
     case r of
@@ -158,7 +158,7 @@ jenkinsable rs =
       Report _ _ ->
         []
 
-createRepository :: GithubAuth -> (a -> Maybe GithubTemplate) -> Org -> Project a b -> EitherT GithubCreateError IO ()
+createRepository :: GithubAuth -> (a -> Maybe GithubTemplate) -> Org -> Project a b c -> EitherT GithubCreateError IO ()
 createRepository auth templateName o p = do
   let org = T.unpack . orgName $ o
       repo = T.unpack . renderName . name $ p
@@ -178,7 +178,7 @@ createRepository auth templateName o p = do
     lift . pushTemplate p
 
 -- Permissions only for the time being
-updateRepository :: GithubAuth -> Org -> Team -> Project a b -> EitherT GithubCreateError IO ()
+updateRepository :: GithubAuth -> Org -> Team -> Project a b c -> EitherT GithubCreateError IO ()
 updateRepository auth o admins p = do
   let org = T.unpack . orgName $ o
       repo = T.unpack . renderName . name $ p
@@ -191,7 +191,7 @@ updateRepository auth o admins p = do
     bimapEitherT AddProtectionError id . EitherT $
       GB.protect auth org repo (T.unpack $ renderBranch b) (Just pro)
 
-genModJob :: Project a b -> Build -> J.ModJob
+genModJob :: Project a b c -> Build -> J.ModJob
 genModJob p b =
   J.ModJob {
       J.modName = J.JobName $ buildName b
@@ -199,7 +199,7 @@ genModJob p b =
     , J.params = toParams p $ replacements b
     }
 
-toParams :: Project a b -> [Replace] -> Text -> Maybe Text
+toParams :: Project a b c -> [Replace] -> Text -> Maybe Text
 toParams p rs s = case s of
   "project" ->
     Just . renderName . name $ p
@@ -207,7 +207,7 @@ toParams p rs s = case s of
     fmap replaceValue . flip P.find rs $ \r ->
       replaceKey r == s
 
-pushTemplate :: Project a b -> GithubTemplate -> IO ()
+pushTemplate :: Project a b c -> GithubTemplate -> IO ()
 pushTemplate p t =
   void . withSystemTempDirectory "template_repo" $ \dir ->
     system $ P.intercalate " " ["./bin/clone_template", dir, T.unpack . githubTemplate $ t, T.unpack . renderName . name $ p]

@@ -8,7 +8,6 @@ module Anatomy.Data (
   , T.Permission (..)
   , Project (..)
   , ProjectName (..)
-  , Status (..)
   , Variant (..)
   , Report (..)
   , SyncMode (..)
@@ -127,11 +126,11 @@ data Team =
     , teamPermission :: Maybe Permission
     } deriving (Eq, Show)
 
-data Project a b =
+data Project a b c =
   Project {
       name :: ProjectName
     , description :: Text
-    , status :: Status
+    , status :: c
     , cls :: a
     , category :: Maybe b
     , teams :: [Team]
@@ -174,18 +173,9 @@ newtype BuildTemplate =
       buildTemplate :: Text
     } deriving (Eq, Show)
 
-project :: Text -> Text -> Status -> a -> [BuildSkeleton] -> [(Branch, Protection)] -> Project a b
+project :: Text -> Text -> c -> a -> [BuildSkeleton] -> [(Branch, Protection)] -> Project a b c
 project n d s c b pro =
   Project (ProjectName n) d s c Nothing [] ((\(BuildSkeleton w r t) -> Build (w n) r t) <$> b) pro
-
-data Status =
-    Idea             -- A readme.
-  | Nursery          -- Some code. Might work. Probably doesn't.
-  | Mature           -- Stable, small, safe incremental changes only.
-  | Broken           -- Broken, but in use, needs some attention, but needs to be treated with a soft touch.
-  | Deprecated       -- Don't use it.
-  | Unknown          -- Something so we can ease into this.
-  deriving (Eq, Show)
 
 data SyncAction =
     CreateRepository
@@ -202,9 +192,9 @@ data Variant =
   | Library
   deriving (Eq, Show)
 
-data Report a b =
+data Report a b c =
   Report {
-      reportProject :: Maybe (Project a b)
+      reportProject :: Maybe (Project a b c)
     , reportGithub :: Maybe Repo
     } deriving (Eq, Show)
 
