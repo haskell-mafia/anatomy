@@ -51,7 +51,6 @@ library
 
   exposed-modules:
                        Anatomy
-                       Anatomy.Ci.Jenkins
                        Anatomy.Ci.GitHub
                        Anatomy.Data
                        Anatomy.Main

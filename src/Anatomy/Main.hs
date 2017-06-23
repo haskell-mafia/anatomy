@@ -3,7 +3,6 @@
 module Anatomy.Main where
 
 import           Anatomy
-import qualified Anatomy.Ci.Jenkins as J
 
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.Either
@@ -31,8 +30,6 @@ data Command =
   | SyncCommand
   | SyncNewCommand
   | RefreshGithubCommand
-  | RefreshJenkinsCommand
-  | GenerateJenkinsConfig FilePath
   | UpdateRepositories
   | RepositoryList FilePath
   deriving (Eq, Show)
@@ -72,7 +69,6 @@ anatomyMain buildInfoVersion templates org admins projects = do
         hookz <- HooksUrl <$> env "JENKINS_HOOKS"
         token <- HipchatToken <$> env "HIPCHAT_TOKEN"
         room <- liftIO $ (HipchatRoom . T.pack . fromMaybe "ci") <$> getEnv "HIPCHAT_ROOM_GITHUB"
-        conf <- getJenkinsConfiguration
 
         r <- bimapEitherT SyncReportError id $
           report github org projects
@@ -81,8 +77,6 @@ anatomyMain buildInfoVersion templates org admins projects = do
           syncRepositories github templates org admins n
         bimapEitherT SyncCreateError id $
           syncHooks github token room org hookz n
-        bimapEitherT SyncBuildError id $
-          syncBuilds conf n
         forM_ n $
           liftIO . T.putStrLn . renderProjectReport
 
@@ -91,7 +85,6 @@ anatomyMain buildInfoVersion templates org admins projects = do
         hookz <- HooksUrl <$> env "JENKINS_HOOKS"
         token <- HipchatToken <$> env "HIPCHAT_TOKEN"
         room <- liftIO $ (HipchatRoom . T.pack . fromMaybe "ci") <$> getEnv "HIPCHAT_ROOM_GITHUB"
-        conf <- getJenkinsConfiguration
 
         r <- bimapEitherT SyncReportError id $
           report github org projects
@@ -102,8 +95,6 @@ anatomyMain buildInfoVersion templates org admins projects = do
           syncHooks github token room org hookz projects
         bimapEitherT SyncGithubError id $
           forM_ (githubprojects r) $ updateRepository github org admins
-        bimapEitherT SyncBuildError id $
-          syncBuilds conf projects
         forM_ (newprojects r) $
           liftIO . T.putStrLn . renderProjectReport
 
@@ -118,16 +109,6 @@ anatomyMain buildInfoVersion templates org admins projects = do
           report github org projects
         bimapEitherT SyncCreateError id .
           syncHooks github token room org hookz $ hookable r
-
-      RefreshJenkinsCommand -> orDie renderBuildError $ do
-        conf <- getJenkinsConfiguration
-        syncBuilds conf projects
-
-      GenerateJenkinsConfig f ->
-        forM_ projects $ \p ->
-          forM (builds p) $ \b ->
-            J.generateJob (genModJob p b) >>=
-              T.writeFile (f </> (T.unpack $ buildName b) <.> "xml")
 
       UpdateRepositories -> orDie renderSyncError $ do
         github <- (GithubOAuth . T.unpack) <$> env "GITHUB_OAUTH"
@@ -149,13 +130,6 @@ anatomyMain buildInfoVersion templates org admins projects = do
               , "/"
               , n
               ]
-
-getJenkinsConfiguration :: MonadIO m => m JenkinsConfiguration
-getJenkinsConfiguration = liftIO $ do
-  jenkins <- JenkinsAuth <$> env "JENKINS_AUTH"
-  usr <- JenkinsUser <$> env "JENKINS_USER"
-  host <- JenkinsUrl <$> env "JENKINS_HOST"
-  pure $ JenkinsConfiguration usr jenkins host
 
 env :: MonadIO m => Text -> m Text
 env var =
@@ -180,17 +154,11 @@ commandP =  subparser $
               "Create repositories, hooks and jobs for new projects ."
               (pure SyncNewCommand)
   <> command' "sync"
-              "Create new projects, update all hooks and jenkins configs."
+              "Create new projects, update all hooks"
               (pure SyncCommand)
   <> command' "refresh-github-hooks"
               "Update all github hooks."
               (pure RefreshGithubCommand)
-  <> command' "refresh-jenkins-jobs"
-              "Update all jenkins configs."
-              (pure RefreshJenkinsCommand)
-  <> command' "generate-jenkins-config"
-              "Generate all jenkins build configurations into the given directory."
-              (GenerateJenkinsConfig <$> filepathP)
   <> command' "update-repositories"
               "Update permissions for all github repositories."
               (pure UpdateRepositories)

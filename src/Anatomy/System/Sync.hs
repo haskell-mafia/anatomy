@@ -3,12 +3,10 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Anatomy.System.Sync (
     syncRepositories
-  , syncHooks
   , syncBuilds
   , githubprojects
   , newprojects
   , hookable
-  , jenkinsable
   , syncReport
   , renderProjectReport
   , genModJob
@@ -24,7 +22,6 @@ import           Control.Monad.IO.Class
 import           Control.Retry
 
 import qualified Anatomy.Ci.GitHub as G
-import qualified Anatomy.Ci.Jenkins as J
 import           Anatomy.System.XmlDiff
 
 import qualified Data.Text as T
@@ -55,46 +52,6 @@ syncHooks :: GithubAuth -> HipchatToken -> HipchatRoom -> Org -> HooksUrl -> [Pr
 syncHooks auth token room o h projects =
   forM_ projects $
     G.hook h token room auth o . name
-
-syncBuilds :: JenkinsConfiguration -> [Project a b c] -> EitherT SyncBuildError IO ()
-syncBuilds conf projects =
-  forM_ projects $ \p -> do
-    -- Don't spam jenkins, its a little fragile.
-    liftIO $ threadDelay 200000 {-- 200 ms --}
-
-    forM (builds p) $
-      syncBuild conf p
-
-syncBuild :: JenkinsConfiguration -> Project a b c -> Build -> EitherT SyncBuildError IO ()
-syncBuild conf p b = do
-  let mj = genModJob p b
-  let createOrUpdate = retry $ J.createOrUpdateJob conf mj
-
-  currentJob <- lift . retry $ getJob conf b
-
-  case currentJob of
-    Nothing ->
-      lift createOrUpdate
-    Just currentJob' -> do
-      expectedJob <- lift . J.generateJob $ mj
-
-      case xmlDiffText currentJob' expectedJob of
-        Left e ->
-          left $ XmlError b e
-
-        Right (Right ()) ->
-          right ()
-
-        Right (Left (XmlDiff e (n1, n2))) -> do
-          lift . putStrLn . T.unpack $ "Job '" <> buildName b <> "' has changed at " <> elementsPath e
-            <> " from " <> (T.pack . show) n1
-            <> " to " <> (T.pack . show) n2
-          lift createOrUpdate
-
-getJob :: JenkinsConfiguration -> Build -> IO (Maybe Text)
-getJob conf b = do
-  e <- J.getJob conf (J.JobName $ buildName b)
-  pure $ rightToMaybe e
 
 -- | Log sync reporting for the specified projects.
 syncReport :: [Project a b c] -> IO ()
@@ -149,15 +106,6 @@ hookable rs =
       Report (Just p) (Just _) ->
         [p]
 
-jenkinsable :: [Report a b c] -> [Project a b c]
-jenkinsable rs =
-  rs >>= \r ->
-    case r of
-      Report (Just p) _ ->
-        [p]
-      Report _ _ ->
-        []
-
 createRepository :: GithubAuth -> (a -> Maybe GithubTemplate) -> Org -> Project a b c -> EitherT GithubCreateError IO ()
 createRepository auth templateName o p = do
   let org = T.unpack . orgName $ o
@@ -190,14 +138,6 @@ updateRepository auth o admins p = do
   forM_ (branchProtection p) $ \(b, pro) ->
     bimapEitherT AddProtectionError id . EitherT $
       GB.protect auth org repo (T.unpack $ renderBranch b) (Just pro)
-
-genModJob :: Project a b c -> Build -> J.ModJob
-genModJob p b =
-  J.ModJob {
-      J.modName = J.JobName $ buildName b
-    , J.jobTemplate = template b
-    , J.params = toParams p $ replacements b
-    }
 
 toParams :: Project a b c -> [Replace] -> Text -> Maybe Text
 toParams p rs s = case s of

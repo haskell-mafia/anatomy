@@ -14,7 +14,7 @@ Creating a new project
 TODO: Elaborate
 
 Open a pull request for your topic branch. Once it is has been approved and merged to master,
-then Anatomy will automatically create the github project for you, the jenkins jobs (for master and PR branches), and setup all the appropriate webhooks for hipchat, Jenkins etc (so you are ready to go).
+then Anatomy will automatically create the github project for you, and setup all the appropriate webhooks for hipchat  etc (so you are ready to go).
 
 Also, if there exists an appropriate template for your project type, then your empty repo will be pre-populated with the template contents (more templates are always welcome).
 
@@ -31,9 +31,9 @@ Operations
 For each project check current state, has repo, builds etc... go and add what is required for sync.
 
 
-### refresh github / jenkins
+### refresh github
 
-For each project refresh github hooks and jenkins builds
+For each project refresh github hooks
 
 
 ### stats / reports

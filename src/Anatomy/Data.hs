@@ -20,10 +20,6 @@ module Anatomy.Data (
   , BuildTemplate (..)
   , XmlDiffError (..)
   , HooksUrl (..)
-  , JenkinsConfiguration (..)
-  , JenkinsUrl (..)
-  , JenkinsUser (..)
-  , JenkinsAuth (..)
   , SyncBuildError (..)
   , GithubCreateError (..)
   , HipchatToken (..)
@@ -75,28 +71,6 @@ retrye e =
 newtype HooksUrl =
   HooksUrl {
       hooksUrl :: Text
-    } deriving (Eq, Show)
-
-newtype JenkinsUrl =
-  JenkinsUrl {
-      jenkinsUrl :: Text
-    } deriving (Eq, Show)
-
-data JenkinsConfiguration =
-  JenkinsConfiguration {
-      jenkinsUser :: JenkinsUser
-    , jenkinsOAuth :: JenkinsAuth
-    , jenkinsHost :: JenkinsUrl
-    } deriving (Eq, Show)
-
-newtype JenkinsUser =
-  JenkinsUser {
-      renderUser :: Text
-    } deriving (Eq, Show)
-
-newtype JenkinsAuth =
-  JenkinsAuth {
-      jenkinsAuth :: Text
     } deriving (Eq, Show)
 
 newtype Org =
