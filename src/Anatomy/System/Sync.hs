@@ -3,23 +3,18 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Anatomy.System.Sync (
     syncRepositories
-  , syncBuilds
   , githubprojects
   , newprojects
   , hookable
   , syncReport
   , renderProjectReport
-  , genModJob
   , updateRepository
   ) where
 
 import           Anatomy.Data
 
-import           Control.Concurrent (threadDelay)
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Either
-import           Control.Monad.IO.Class
-import           Control.Retry
 
 import qualified Anatomy.Ci.GitHub as G
 import           Anatomy.System.XmlDiff
@@ -47,11 +42,6 @@ syncRepositories auth templateName o admins projects = do
   forM_ projects $ \p -> do
     createRepository auth templateName o p
     updateRepository auth o admins p
-
-syncHooks :: GithubAuth -> HipchatToken -> HipchatRoom -> Org -> HooksUrl -> [Project a b c] -> EitherT Error IO ()
-syncHooks auth token room o h projects =
-  forM_ projects $
-    G.hook h token room auth o . name
 
 -- | Log sync reporting for the specified projects.
 syncReport :: [Project a b c] -> IO ()
@@ -138,16 +128,3 @@ updateRepository auth o admins p = do
   forM_ (branchProtection p) $ \(b, pro) ->
     bimapEitherT AddProtectionError id . EitherT $
       GB.protect auth org repo (T.unpack $ renderBranch b) (Just pro)
-
-toParams :: Project a b c -> [Replace] -> Text -> Maybe Text
-toParams p rs s = case s of
-  "project" ->
-    Just . renderName . name $ p
-  _ ->
-    fmap replaceValue . flip P.find rs $ \r ->
-      replaceKey r == s
-
-pushTemplate :: Project a b c -> GithubTemplate -> IO ()
-pushTemplate p t =
-  void . withSystemTempDirectory "template_repo" $ \dir ->
-    system $ P.intercalate " " ["./bin/clone_template", dir, T.unpack . githubTemplate $ t, T.unpack . renderName . name $ p]
