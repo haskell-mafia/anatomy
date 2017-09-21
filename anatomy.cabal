@@ -1,6 +1,6 @@
 name:                  ambiata-anatomy
 version:               0.0.1
-license:               Apache-2.0
+license:               BSD3
 license-file:          LICENSE
 author:                Ambiata <info@ambiata.com>
 maintainer:            Ambiata <info@ambiata.com>
