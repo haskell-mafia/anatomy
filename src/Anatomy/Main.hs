@@ -12,7 +12,7 @@ import           Data.String (String)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-import           Github.Data
+import           Github.Data (repoName)
 
 import           Options.Applicative
 

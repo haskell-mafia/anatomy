@@ -51,7 +51,7 @@ import           Control.Retry
 import qualified Data.Text as T
 
 import           Github.Auth
-import           Github.Data hiding (Branch)
+import           Github.Data (Error (..), Permission, Protection, Repo)
 import qualified Github.Data.Definitions as G
 import qualified Github.Data.Teams as T
 

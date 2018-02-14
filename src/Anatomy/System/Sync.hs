@@ -29,7 +29,7 @@ import           Anatomy.System.XmlDiff
 
 import qualified Data.Text as T
 
-import           Github.Repos
+import           Github.Repos (Error, NewOrgRepo (..), createOrganizationRepo, newOrgRepo)
 import qualified Github.Repos.Branches as GB
 import qualified Github.Organizations as GO
 
