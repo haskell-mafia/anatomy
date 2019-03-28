@@ -79,20 +79,10 @@ hooks token room url oauth org = do
 
 -- | Register all hooks for specified project
 hook :: HooksUrl -> HipchatToken -> HipchatRoom -> GithubAuth -> Org -> ProjectName -> EitherT Error IO ()
-hook url token room oauth org p = do
+hook url _ _ oauth org p = do
   liftIO . T.putStrLn $ "Creating hooks for [" <> orgName org <> "/" <> renderName p <> "]"
-  forM_ [jenkins url, hipchat token room, webhook url] $ \h ->
+  forM_ [webhook url] $ \h ->
     h oauth org p
-
--- | Register the jenkins hook
--- |   schema: https://api.github.com/hooks
-jenkins :: HooksUrl -> GithubAuth -> Org -> ProjectName -> EitherT Error IO Hook
-jenkins url oauth org p =
-  EitherT $ createHook oauth (s orgName org) (s renderName p) "jenkins" (M.fromList [
-       ("jenkins_hook_url", (T.unpack (hooksUrl url) </> "github-webhook/"))
-     ]) (Just [
-       "push"
-     ]) (Just True)
 
 -- | Register the generic web hook
 -- |   schema: https://developer.github.com/v3/repos/hooks/#create-a-hook
@@ -116,46 +106,6 @@ files oauth org p fileGlob = do
 s :: (a -> Text) -> a -> String
 s f =
   T.unpack . f
-
--- | Register the hipchat hook
--- |   schema: https://api.github.com/hooks
-hipchat :: HipchatToken -> HipchatRoom -> GithubAuth -> Org -> ProjectName -> EitherT Error IO Hook
-hipchat token room oauth org p =
-  EitherT $ createHook oauth (s orgName org) (s renderName p) "hipchat" (M.fromList [
-      ("auth_token", s hipchatToken token)
-    , ("room", s hipchatRoom room)
---    , ("restrict_to_branch", "")
---    , ("color", "")
---    , ("server", "")
-    , ("notify", "1")
-    , ("quiet_fork", "0")
-    , ("quiet_watch", "0")
-    , ("quiet_comments", "0")
-    , ("quiet_wiki", "0")
-    ]) (Just [
-      "commit_comment"
-    , "create"
-    , "delete"
-    , "deployment"
-    , "deployment_status"
-    , "download"
-    , "follow"
-    , "fork"
-    , "fork_apply"
-    , "gist"
-    , "gollum"
-    , "issue_comment"
-    , "issues"
-    , "member"
-    , "public"
-    , "pull_request"
-    , "pull_request_review_comment"
-    , "push"
-    , "release"
-    , "status"
-    , "team_add"
-    , "watch"
-    ]) (Just True)
 
 repos :: GithubAuth -> String -> IO [String]
 repos oauth jn =
